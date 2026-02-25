@@ -68,12 +68,13 @@ app.get('/api/prices', async (req, res) => {
     });
     const data = await response.json();
     const card = (data.data || [])[0];
-    if (card && card.prices && card.prices.ebay) {
-      const grades = { raw: 'NEAR_MINT', psa9: 'PSA_9', psa10: 'PSA_10' };
+    if (card && card.prices) {
+      const conditions = { nm: 'NEAR_MINT', lp: 'LIGHTLY_PLAYED', mp: 'MODERATELY_PLAYED', hp: 'HEAVILY_PLAYED', dmg: 'DAMAGED' };
       const insert = db.prepare('INSERT INTO price_snapshots (card_id, grade, price, low, high) VALUES (?, ?, ?, ?, ?)');
-      for (const [grade, field] of Object.entries(grades)) {
-        const p = card.prices.ebay[field];
-        if (p && p.avg) insert.run(name.toLowerCase(), grade, p.avg, p.low || null, p.high || null);
+      const src = card.prices.ebay || card.prices.tcgplayer || {};
+      for (const [key, field] of Object.entries(conditions)) {
+        const p = src[field];
+        if (p && p.avg) insert.run(name.toLowerCase(), key, p.avg, p.low || null, p.high || null);
       }
     }
     res.json(data);
@@ -157,14 +158,15 @@ cron.schedule('0 */6 * * *', async () => {
       const data = await response.json();
       const pt = (data.data || [])[0];
       if (!pt || !pt.prices || !pt.prices.ebay) continue;
-      const grades = { raw: 'NEAR_MINT', psa9: 'PSA_9', psa10: 'PSA_10' };
+      const conditions = { nm: 'NEAR_MINT', lp: 'LIGHTLY_PLAYED', mp: 'MODERATELY_PLAYED', hp: 'HEAVILY_PLAYED', dmg: 'DAMAGED' };
       const insert = db.prepare('INSERT INTO price_snapshots (card_id, grade, price, low, high) VALUES (?, ?, ?, ?, ?)');
-      for (const [grade, field] of Object.entries(grades)) {
-        const p = pt.prices.ebay[field];
-        if (p && p.avg) insert.run(card.id, grade, p.avg, p.low || null, p.high || null);
+      const src = pt.prices.ebay || pt.prices.tcgplayer || {};
+      for (const [key, field] of Object.entries(conditions)) {
+        const p = src[field];
+        if (p && p.avg) insert.run(card.id, key, p.avg, p.low || null, p.high || null);
       }
       if (card.max_price) {
-        const rawPrice = pt.prices.ebay['NEAR_MINT'] && pt.prices.ebay['NEAR_MINT'].avg;
+        const rawPrice = src['NEAR_MINT'] && src['NEAR_MINT'].avg;
         if (rawPrice && rawPrice <= card.max_price) {
           db.prepare('INSERT INTO alerts (card_id, card_name, price, threshold) VALUES (?, ?, ?, ?)').run(card.id, card.name, rawPrice, card.max_price);
           console.log(`[alert] ${card.name} hit threshold: $${rawPrice} <= $${card.max_price}`);
