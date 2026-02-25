@@ -1,0 +1,2591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PokéWatch — eBay Card Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0d0f;
+    --surface: #16161a;
+    --surface2: #1e1e24;
+    --border: #2a2a35;
+    --yellow: #f9e100;
+    --red: #e63946;
+    --blue: #4cc9f0;
+    --green: #57cc99;
+    --orange: #ff9f1c;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --card-w: 400px;
+
+    /* Grade series colors */
+    --c-nm:  #57cc99;
+    --c-lp:  #ff9f1c;
+    --c-mp:  #a78bfa;
+    --c-hp:  #f87171;
+    --c-dmg: #94a3b8;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(249,225,0,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(249,225,0,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none; z-index: 0;
+  }
+
+  header {
+    z-index: 10;
+    border-bottom: 1px solid var(--border);
+    background: rgba(13,13,15,0.92);
+    backdrop-filter: blur(12px);
+    padding: 0 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px; position: sticky; top: 0;
+  }
+  .logo { font-family: 'Bangers', cursive; font-size: 28px; letter-spacing: 2px; color: var(--yellow); text-shadow: 2px 2px 0 rgba(249,225,0,0.2); }
+  .logo span { color: var(--text); }
+  .header-stats { display: flex; gap: 24px; align-items: center; }
+  .stat-pill { font-family: 'DM Mono', monospace; font-size: 12px; padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border); color: var(--muted); }
+  .stat-pill b { color: var(--text); }
+  .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; display: inline-block; margin-right: 6px; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+
+  main { position: relative; z-index: 1; max-width: 1440px; margin: 0 auto; padding: 32px 32px 80px; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 32px; border-bottom: 1px solid var(--border); }
+  .tab { font-family: 'DM Mono', monospace; font-size: 13px; padding: 10px 20px; border: none; background: none; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all .2s; letter-spacing: .5px; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--yellow); border-bottom-color: var(--yellow); }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* Add card form */
+  .add-card-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px; margin-bottom: 32px; position: relative; overflow: hidden; }
+  .add-card-section::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--yellow), var(--red), var(--blue)); }
+  .section-title { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 20px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto auto; gap: 12px; align-items: end; }
+  .form-group label { display: block; font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  input, select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 10px 14px; font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; transition: border-color .2s; }
+  input:focus, select:focus { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(249,225,0,.08); }
+  input::placeholder { color: var(--muted); }
+  select option { background: var(--surface2); }
+
+  .btn { padding: 10px 20px; border-radius: 8px; border: none; font-family: 'DM Mono', monospace; font-size: 13px; cursor: pointer; transition: all .2s; letter-spacing: .5px; white-space: nowrap; }
+  .btn-primary { background: var(--yellow); color: #0d0d0f; font-weight: 600; }
+  .btn-primary:hover { background: #ffe600; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(249,225,0,.3); }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--muted); }
+  .btn-danger { background: rgba(230,57,70,.15); color: var(--red); border: 1px solid rgba(230,57,70,.3); padding: 6px 12px; font-size: 12px; }
+  .btn-danger:hover { background: rgba(230,57,70,.25); }
+  .btn-scan { background: var(--surface2); color: var(--blue); border: 1px solid rgba(76,201,240,.3); padding: 6px 12px; font-size: 12px; }
+  .btn-scan:hover { background: rgba(76,201,240,.1); }
+
+  /* ======== WATCHLIST CARDS ======== */
+  .watchlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--card-w), 1fr)); gap: 24px; }
+
+  .watch-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; transition: transform .2s, border-color .2s, box-shadow .2s; animation: slideIn .35s ease; }
+  @keyframes slideIn { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+  .watch-card:hover { transform: translateY(-3px); border-color: #3a3a48; box-shadow: 0 12px 40px rgba(0,0,0,.4); }
+  .watch-card.has-new { border-color: var(--green); }
+  .new-badge { display: none; align-items: center; justify-content: center; gap: 6px; background: var(--green); color: #0d0d0f; font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: 2px; padding: 5px; }
+  .has-new .new-badge { display: flex; }
+
+  .card-header { padding: 16px 20px 14px; border-bottom: 1px solid var(--border); }
+  .card-name { font-size: 17px; font-weight: 600; margin-bottom: 6px; line-height: 1.3; }
+  .card-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .tag { font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); }
+  .tag.grade { border-color: rgba(249,225,0,.4); color: var(--yellow); }
+  .trend-badge { display: inline-flex; align-items: center; gap: 3px; font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 7px; border-radius: 4px; }
+  .trend-badge.up   { background: rgba(87,204,153,.15); color: var(--green); }
+  .trend-badge.down { background: rgba(230,57,70,.12);  color: var(--red); }
+  .trend-badge.flat { background: rgba(107,107,128,.2); color: var(--muted); }
+
+  /* ---- Grade toggles ---- */
+  .grade-toggles {
+    display: flex;
+    gap: 6px;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0,0,0,.2);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .grade-toggle-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin-right: 4px;
+  }
+  .grade-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: none;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all .15s;
+    position: relative;
+    user-select: none;
+  }
+  .grade-btn .grade-swatch {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    opacity: 0.4;
+    transition: opacity .15s;
+  }
+  .grade-btn.active { color: var(--text); }
+  .grade-btn.active .grade-swatch { opacity: 1; }
+  .grade-btn.active[data-grade="nm"]  { border-color: rgba(87,204,153,.5);  background: rgba(87,204,153,.08);  color: #57cc99; }
+  .grade-btn.active[data-grade="lp"]  { border-color: rgba(255,159,28,.5);  background: rgba(255,159,28,.08);  color: #ff9f1c; }
+  .grade-btn.active[data-grade="mp"]  { border-color: rgba(167,139,250,.5); background: rgba(167,139,250,.08); color: #a78bfa; }
+  .grade-btn.active[data-grade="hp"]  { border-color: rgba(248,113,113,.5); background: rgba(248,113,113,.08); color: #f87171; }
+  .grade-btn.active[data-grade="dmg"] { border-color: rgba(148,163,184,.5); background: rgba(148,163,184,.08); color: #94a3b8; }
+  .grade-btn:hover { border-color: var(--muted); color: var(--text); }
+
+  /* ---- Stats grid per grade ---- */
+  .grade-stats-grid {
+    border-bottom: 1px solid var(--border);
+  }
+  .grade-stats-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 1fr 1fr;
+    border-bottom: 1px solid var(--border);
+    transition: opacity .2s;
+  }
+  .grade-stats-row:last-child { border-bottom: none; }
+  .grade-stats-row.hidden { display: none; }
+
+  .grade-label-cell {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 14px;
+    border-right: 1px solid var(--border);
+  }
+  .grade-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .grade-label-text { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; }
+
+  .stat-cell {
+    padding: 10px 12px;
+    border-right: 1px solid var(--border);
+    text-align: center;
+  }
+  .stat-cell:last-child { border-right: none; }
+  .stat-cell-label { font-family: 'DM Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 4px; }
+  .stat-cell-value { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--text); }
+
+  /* Header row for stats */
+  .grade-stats-header {
+    display: grid;
+    grid-template-columns: 80px 1fr 1fr 1fr;
+    padding: 6px 0;
+    background: rgba(0,0,0,.15);
+  }
+  .grade-stats-header div {
+    text-align: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    padding: 0 12px;
+  }
+  .grade-stats-header div:first-child { text-align: left; }
+
+  /* ---- Chart ---- */
+  .chart-container { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  .chart-top-bar {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    padding: 0 14px;
+    gap: 0;
+    min-height: 38px;
+  }
+  .chart-tab { font-family: 'DM Mono', monospace; font-size: 11px; padding: 8px 12px; background: none; border: none; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; letter-spacing: .5px; transition: all .15s; }
+  .chart-tab:hover { color: var(--text); }
+  .chart-tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+  .chart-legend { margin-left: auto; display: flex; align-items: center; gap: 12px; font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .legend-line { width: 14px; height: 0; border-top: 1px dashed rgba(249,225,0,.5); }
+
+  .chart-canvas-wrap { padding: 10px 14px 6px; position: relative; }
+  canvas.price-chart { width: 100%; height: 130px; display: block; cursor: crosshair; }
+
+  .chart-tooltip {
+    position: absolute;
+    background: #12121a;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 11px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .1s;
+    z-index: 20;
+    white-space: nowrap;
+    box-shadow: 0 4px 16px rgba(0,0,0,.5);
+    line-height: 1.7;
+  }
+  .chart-tooltip.visible { opacity: 1; }
+
+  .chart-x-labels { display: flex; justify-content: space-between; padding: 2px 14px 10px; font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); }
+
+  /* ---- Footer ---- */
+  .bottom-row {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  .bottom-cell {
+    flex: 1;
+    padding: 11px 14px;
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .bottom-cell:last-child { border-right: none; }
+  .bottom-cell-label { font-family: 'DM Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); }
+  .bottom-cell-value { font-family: 'DM Mono', monospace; font-size: 14px; }
+  .bottom-cell-sub { font-size: 11px; color: var(--muted); }
+
+  .card-body { padding: 11px 18px; border-bottom: 1px solid var(--border); }
+  .threshold-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; flex-wrap: wrap; }
+  .threshold-row span { color: var(--yellow); }
+
+  .card-footer { padding: 11px 18px; display: flex; justify-content: space-between; align-items: center; }
+  .last-checked { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+
+  /* ======== LISTINGS ======== */
+  .listings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .listings-title { font-family: 'Bangers', cursive; font-size: 24px; letter-spacing: 1px; }
+  .listing-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; margin-bottom: 10px; display: grid; grid-template-columns: 1fr auto auto auto; gap: 16px; align-items: center; transition: border-color .2s; animation: slideIn .3s ease; }
+  .listing-item:hover { border-color: var(--muted); }
+  .listing-item.new-item { border-left: 3px solid var(--green); }
+  .listing-title { font-weight: 500; font-size: 14px; margin-bottom: 4px; }
+  .listing-sub { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .listing-price { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; color: var(--green); text-align: right; }
+  .listing-price.over { color: var(--red); }
+  .listing-type { font-family: 'DM Mono', monospace; font-size: 11px; padding: 4px 10px; border-radius: 4px; text-align: center; }
+  .listing-type.auction { background: rgba(230,57,70,.15); color: var(--red); border: 1px solid rgba(230,57,70,.3); }
+  .listing-type.buynow  { background: rgba(76,201,240,.1);  color: var(--blue); border: 1px solid rgba(76,201,240,.3); }
+  .listing-actions { display: flex; gap: 8px; }
+  .btn-view { padding: 6px 14px; background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer; text-decoration: none; transition: all .2s; }
+  .btn-view:hover { border-color: var(--yellow); color: var(--yellow); }
+
+  /* ======== SETTINGS ======== */
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .settings-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+  .settings-panel h3 { font-family: 'DM Mono', monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 20px; }
+  .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-label { font-size: 14px; }
+  .setting-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .toggle { width: 40px; height: 22px; background: var(--surface2); border: 1px solid var(--border); border-radius: 11px; cursor: pointer; position: relative; transition: background .2s; flex-shrink: 0; }
+  .toggle::after { content: ''; position: absolute; width: 16px; height: 16px; background: var(--muted); border-radius: 50%; top: 2px; left: 2px; transition: all .2s; }
+  .toggle.on { background: rgba(87,204,153,.2); border-color: var(--green); }
+  .toggle.on::after { background: var(--green); transform: translateX(18px); }
+
+  /* ======== MISC ======== */
+  .api-banner { background: rgba(230,57,70,.1); border: 1px solid rgba(230,57,70,.3); border-radius: 10px; padding: 14px 18px; margin-bottom: 28px; display: flex; align-items: center; gap: 12px; font-size: 14px; }
+  .api-banner a { color: var(--blue); text-decoration: none; }
+  .api-banner a:hover { text-decoration: underline; }
+
+  .empty-state { text-align: center; padding: 80px 20px; color: var(--muted); }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: .4; }
+  .empty-state h3 { font-family: 'Bangers', cursive; font-size: 28px; letter-spacing: 1px; color: var(--text); margin-bottom: 8px; }
+
+  #toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
+  .toast { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: 8px; padding: 14px 18px; font-size: 13px; max-width: 320px; animation: toastIn .3s ease; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+  .toast.error { border-left-color: var(--red); }
+  @keyframes toastIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+
+  .scan-indicator { display: inline-flex; align-items: center; gap: 8px; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--blue); padding: 6px 12px; background: rgba(76,201,240,.08); border: 1px solid rgba(76,201,240,.2); border-radius: 6px; }
+  .scan-spinner { width: 10px; height: 10px; border: 2px solid rgba(76,201,240,.3); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  /* ======== CATALOGUE ======== */
+  .cat-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 28px; flex-wrap: wrap; }
+  .cat-controls { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+  .cat-search-wrap { position: relative; display: flex; align-items: center; }
+  .cat-search-icon { position: absolute; left: 12px; color: var(--muted); font-size: 18px; pointer-events: none; line-height: 1; }
+  .cat-search-wrap input { width: 280px; padding-left: 36px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; padding-top: 10px; padding-bottom: 10px; outline: none; }
+  .cat-search-wrap input:focus { border-color: var(--yellow); }
+  .era-filters { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .era-btn { font-family: 'DM Mono', monospace; font-size: 10px; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; transition: all .15s; letter-spacing: .5px; }
+  .era-btn:hover { color: var(--text); border-color: var(--muted); }
+  .era-btn.active { color: var(--yellow); border-color: var(--yellow); background: rgba(249,225,0,.06); }
+  .cat-loading { display: flex; align-items: center; gap: 14px; padding: 60px 0; justify-content: center; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 13px; }
+  .cat-spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--yellow); border-radius: 50%; animation: spin .7s linear infinite; }
+  .cat-era-section { margin-bottom: 44px; }
+  .cat-era-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  .cat-era-title { font-family: 'Bangers', cursive; font-size: 22px; letter-spacing: 1px; color: var(--text); }
+  .cat-era-line { flex: 1; height: 1px; background: var(--border); }
+  .cat-era-count { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+  .cat-sets-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 16px; }
+  .cat-set-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; cursor: pointer; transition: transform .2s, border-color .2s, box-shadow .2s; animation: slideIn .3s ease both; }
+  .cat-set-card:hover { transform: translateY(-4px); border-color: #3a3a48; box-shadow: 0 10px 32px rgba(0,0,0,.5); }
+  .cat-set-img-wrap { width: 100%; aspect-ratio: 4/3; background: var(--surface2); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .cat-set-logo { width: 82%; height: 82%; object-fit: contain; transition: transform .25s; }
+  .cat-set-card:hover .cat-set-logo { transform: scale(1.06); }
+  .cat-set-logo-placeholder { font-size: 36px; opacity: .3; }
+  .cat-set-info { padding: 12px 14px; }
+  .cat-set-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; line-height: 1.3; }
+  .cat-set-meta { display: flex; justify-content: space-between; align-items: center; }
+  .cat-set-date { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); }
+  .cat-set-count { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--blue); }
+
+  /* ======== CARD MODAL ======== */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); backdrop-filter: blur(8px); z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px 48px; overflow-y: auto; animation: fadeIn .2s ease; }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 1100px; overflow: hidden; animation: modalIn .25s ease; position: relative; flex-shrink: 0; }
+  @keyframes modalIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+  .modal-header { padding: 22px 28px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 18px; position: sticky; top: 0; background: var(--surface); z-index: 10; }
+  .modal-set-logo { width: 80px; height: 52px; object-fit: contain; flex-shrink: 0; }
+  .modal-set-name { font-family: 'Bangers', cursive; font-size: 26px; letter-spacing: 1px; }
+  .modal-set-sub { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .modal-close { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; }
+  .modal-close:hover { border-color: var(--red); color: var(--red); }
+  .modal-toolbar { padding: 12px 28px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: rgba(0,0,0,.15); }
+  .modal-search-wrap { position: relative; }
+  .modal-search-wrap input { width: 220px; padding: 7px 12px 7px 30px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; font-family: 'DM Sans', sans-serif; outline: none; }
+  .modal-search-wrap input:focus { border-color: var(--yellow); }
+  .modal-search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 14px; pointer-events: none; }
+  .modal-filter-btn { font-family: 'DM Mono', monospace; font-size: 11px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; transition: all .15s; }
+  .modal-filter-btn:hover { color: var(--text); border-color: var(--muted); }
+  .modal-filter-btn.active { color: var(--yellow); border-color: var(--yellow); background: rgba(249,225,0,.06); }
+  .modal-count { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-left: auto; }
+  .modal-body { padding: 24px 28px 32px; }
+  .modal-loading { display: flex; align-items: center; gap: 14px; padding: 60px 0; justify-content: center; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 13px; }
+  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }
+  .tcg-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; transition: transform .2s, border-color .2s, box-shadow .2s; position: relative; }
+  .tcg-card:hover { transform: translateY(-3px); border-color: #3a3a48; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  .tcg-card.on-watchlist { border-color: rgba(87,204,153,.5); }
+  .tcg-card.on-watchlist .btn-add-watch { border-color: var(--green); color: var(--green); background: rgba(87,204,153,.08); }
+  .tcg-card-img-wrap { width: 100%; aspect-ratio: 2.5/3.5; background: #0a0a0e; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .tcg-card-img { width: 100%; height: 100%; object-fit: contain; transition: transform .3s; }
+  .tcg-card:hover .tcg-card-img { transform: scale(1.04); }
+  .tcg-card-img-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; font-size: 32px; opacity: .2; }
+  .tcg-card-info { padding: 9px 10px 10px; }
+  .tcg-card-name { font-size: 12px; font-weight: 600; margin-bottom: 2px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tcg-card-sub { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); margin-bottom: 7px; }
+  .rarity-badge { display: inline-block; font-family: 'DM Mono', monospace; font-size: 9px; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--border); color: var(--muted); margin-bottom: 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rarity-badge.holo { border-color: rgba(249,225,0,.4); color: var(--yellow); }
+  .rarity-badge.ultra { border-color: rgba(230,57,70,.4); color: var(--red); }
+  .rarity-badge.secret { border-color: rgba(167,139,250,.4); color: #a78bfa; }
+  .rarity-badge.special { border-color: rgba(76,201,240,.4); color: var(--blue); }
+  .btn-add-watch { width: 100%; padding: 6px; border-radius: 6px; border: 1px solid var(--border); background: none; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 10px; cursor: pointer; transition: all .15s; letter-spacing: .5px; }
+  .btn-add-watch:hover { border-color: var(--yellow); color: var(--yellow); background: rgba(249,225,0,.06); }
+
+  /* Add to watchlist mini modal */
+  .add-modal-overlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.65); backdrop-filter: blur(4px); animation: fadeIn .15s ease; }
+  .add-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px 28px 24px; width: 380px; animation: modalIn .2s ease; position: relative; }
+  .add-modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .add-modal-set { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-bottom: 20px; }
+  .add-modal .form-group { margin-bottom: 14px; }
+  .add-modal .form-group label { display: block; font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 7px; }
+  .add-modal input, .add-modal select { width: 100%; }
+  .add-modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .add-modal-actions .btn { flex: 1; }
+
+  @media (max-width: 960px) {
+    .form-row { grid-template-columns: 1fr 1fr; }
+    .settings-grid { grid-template-columns: 1fr; }
+    .listing-item { grid-template-columns: 1fr auto; }
+    .listing-type, .listing-actions { display: none; }
+    main { padding: 20px 16px 60px; }
+    header { padding: 0 16px; }
+    .grade-stats-header, .grade-stats-row { grid-template-columns: 64px 1fr 1fr 1fr; }
+    .cat-sets-row { grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); }
+    .cards-grid { grid-template-columns: repeat(auto-fill, minmax(120px,1fr)); }
+    .modal-header { padding: 16px 18px 14px; }
+    .modal-body { padding: 16px 18px 24px; }
+    .modal-toolbar { padding: 10px 18px; }
+  }
+  /* ======== PORTFOLIO ======== */
+  .portfolio-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .port-stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; position: relative; overflow: hidden; }
+  .port-stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:12px 12px 0 0; }
+  .port-stat-card.pstat-cost::before  { background: linear-gradient(90deg, var(--muted), #4a4a60); }
+  .port-stat-card.pstat-val::before   { background: linear-gradient(90deg, var(--blue), #a78bfa); }
+  .port-stat-card.pstat-up::before    { background: linear-gradient(90deg, var(--green), #57cc9977); }
+  .port-stat-card.pstat-down::before  { background: linear-gradient(90deg, var(--red), #e6394677); }
+  .port-stat-card.pstat-count::before { background: linear-gradient(90deg, var(--yellow), var(--orange)); }
+  .port-stat-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 8px; }
+  .port-stat-value { font-family: 'Bangers', cursive; font-size: 30px; letter-spacing: 1px; }
+  .port-stat-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .port-chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin-bottom: 32px; }
+  .port-chart-label { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 16px; display:flex; justify-content:space-between; align-items:center; }
+  canvas#portfolio-chart { width:100%; height:140px; display:block; }
+
+  .port-section-hdr { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 16px; display:flex; justify-content:space-between; align-items:center; }
+  .port-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .port-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; animation: slideIn .3s ease both; transition: border-color .2s, box-shadow .2s; }
+  .port-card:hover { border-color: #3a3a48; box-shadow: 0 8px 28px rgba(0,0,0,.4); }
+  .port-card-header { padding: 14px 16px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 12px; }
+  .port-tcg-img { width: 52px; height: 72px; object-fit: contain; border-radius: 4px; flex-shrink: 0; background: #0a0a0e; }
+  .port-card-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; line-height: 1.3; }
+  .port-card-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .port-card-body { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--border); }
+  .port-cell { padding: 10px 14px; border-right: 1px solid var(--border); }
+  .port-cell:last-child { border-right: none; }
+  .port-cell-lbl { font-family: 'DM Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 4px; }
+  .port-cell-val { font-family: 'DM Mono', monospace; font-size: 14px; }
+  .port-card-footer { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border); }
+  .pnl-badge { font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 10px; border-radius: 4px; }
+  .pnl-badge.up   { background: rgba(87,204,153,.15); color: var(--green); }
+  .pnl-badge.down { background: rgba(230,57,70,.12);  color: var(--red);   }
+  .pnl-badge.flat { background: rgba(107,107,128,.2); color: var(--muted); }
+
+  /* ======== ALERTS ======== */
+  .alert-config-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin-bottom: 28px; }
+  .alert-config-panel h3 { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
+  .alert-card { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--yellow); border-radius: 10px; padding: 16px 18px; margin-bottom: 10px; display: flex; align-items: center; gap: 14px; animation: slideIn .3s ease; }
+  .alert-card.fired  { border-left-color: var(--red); }
+  .alert-card.sent   { border-left-color: var(--green); }
+  .alert-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .alert-dot.watching { background: var(--yellow); animation: pulse 2s infinite; }
+  .alert-dot.fired    { background: var(--red); }
+  .alert-dot.sent     { background: var(--green); }
+  .alert-info { flex: 1; min-width: 0; }
+  .alert-name { font-size: 14px; font-weight: 600; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .alert-desc { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+  .alert-threshold { font-family: 'DM Mono', monospace; font-size: 18px; color: var(--yellow); margin-left: auto; white-space: nowrap; padding-left: 12px; }
+  .alert-threshold.fired { color: var(--green); }
+
+  /* ======== JP BADGE ======== */
+  .jp-badge { display: inline-block; font-family: 'DM Mono', monospace; font-size: 8px; padding: 1px 5px; border-radius: 3px; background: rgba(249,225,0,.12); border: 1px solid rgba(249,225,0,.25); color: var(--yellow); vertical-align: middle; margin-left: 5px; letter-spacing: 1px; }
+  .cat-lang-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .cat-lang-btn { font-family: 'DM Mono', monospace; font-size: 11px; padding: 7px 18px; border-radius: 7px; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; transition: all .15s; letter-spacing: .5px; }
+  .cat-lang-btn:hover { color: var(--text); border-color: var(--muted); }
+  .cat-lang-btn.active { color: var(--yellow); border-color: var(--yellow); background: rgba(249,225,0,.06); }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Poké<span>Watch</span></div>
+
+  <div class="header-stats">
+    <div class="stat-pill"><b id="stat-watching">0</b> watching</div>
+    <div class="stat-pill"><b id="stat-listings">0</b> listings</div>
+    <div class="stat-pill"><span class="pulse-dot"></span><b>Live</b></div>
+  </div>
+</header>
+
+<main>
+  <div class="api-banner" id="api-banner">
+    <div style="font-size:20px;flex-shrink:0;">⚠️</div>
+    <div><b>Running in demo mode.</b> Toggle Demo Mode off in <b>Settings → Price Data Config</b> to load live raw condition prices from your PokéWatch server.</div>
+    <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;flex-shrink:0;" onclick="document.getElementById('api-banner').remove()">✕</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('watchlist', this)">Watchlist</button>
+    <button class="tab" onclick="switchTab('listings', this)">Live Listings</button>
+    <button class="tab" onclick="switchTab('catalogue', this)">Catalogue</button>
+    <button class="tab" onclick="switchTab('portfolio', this)">Portfolio</button>
+    <button class="tab" onclick="switchTab('alerts', this)">Alerts</button>
+    <button class="tab" onclick="switchTab('settings', this)">Settings</button>
+  </div>
+  <!-- WATCHLIST TAB -->
+  <div class="view active" id="view-watchlist">
+    <div class="add-card-section">
+      <div class="section-title">+ Add card to watchlist</div>
+      <div class="form-row">
+        <div class="form-group"><label>Card Name</label><input type="text" id="inp-name" placeholder="e.g. Charizard Base Set" /></div>
+        <div class="form-group"><label>Set / Edition</label><input type="text" id="inp-set" placeholder="e.g. 1st Edition" /></div>
+        <div class="form-group">
+          <label>Condition</label>
+          <select id="inp-condition">
+            <option value="">Any</option>
+            <option value="Near Mint">Near Mint</option><option value="Lightly Played">Lightly Played</option><option value="Mod. Played">Mod. Played</option><option value="Heavily Played">Heavily Played</option><option value="Damaged">Damaged</option>
+            <option value="CGC 10">CGC 10</option><option value="CGC 9.5">CGC 9.5</option>
+            <option value="Raw NM">Raw NM</option><option value="Raw LP">Raw LP</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Max Price ($)</label><input type="number" id="inp-price" placeholder="500" min="1" /></div>
+        <button class="btn btn-primary" onclick="addCard()">Add Card</button>
+      </div>
+    </div>
+    <div class="watchlist-grid" id="watchlist-grid"></div>
+    <div class="empty-state" id="watchlist-empty" style="display:none;">
+      <div class="empty-icon">🃏</div>
+      <h3>No cards on your watchlist</h3>
+      <p>Add a Pokémon card above to start monitoring eBay listings</p>
+    </div>
+  </div>
+
+  <!-- LISTINGS TAB -->
+  <div class="view" id="view-listings">
+    <div class="listings-header">
+      <div>
+        <div class="listings-title">Live Listings</div>
+        <div style="font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:4px;" id="last-scan-time">Never scanned</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <div id="scan-status"></div>
+        <button class="btn btn-primary" onclick="scanAll()">⟳ Scan All Now</button>
+      </div>
+    </div>
+    <div id="listings-container"><div class="empty-state"><div class="empty-icon">🔍</div><h3>No listings yet</h3><p>Add cards to your watchlist and hit "Scan All" to find listings</p></div></div>
+  </div>
+
+  <!-- CATALOGUE TAB -->
+  <div class="view" id="view-catalogue">
+    <div class="cat-header">
+      <div>
+        <div class="listings-title" style="margin-bottom:6px;">Card Catalogue</div>
+        <div style="font-size:13px;color:var(--muted);">Browse every Pokémon TCG set and add cards directly to your watchlist</div>
+      </div>
+      <div class="cat-controls">
+        <div class="cat-search-wrap">
+          <span class="cat-search-icon">⌕</span>
+          <input type="text" id="cat-search" placeholder="Search sets…" oninput="filterSets(this.value)" />
+        </div>
+        <div class="era-filters" id="era-filters"></div>
+      </div>
+    </div>
+    <div class="cat-lang-tabs">
+      <button class="cat-lang-btn active" id="lang-btn-en" onclick="setCatLang('en', this)">🇺🇸 English</button>
+      <button class="cat-lang-btn"        id="lang-btn-jp" onclick="setCatLang('jp', this)">🇯🇵 Japanese <span class="jp-badge">JP</span></button>
+    </div>
+    <div id="cat-sets-container">
+      <div class="cat-loading"><div class="cat-spinner"></div><span>Loading sets…</span></div>
+    </div>
+  </div>
+
+  <!-- PORTFOLIO TAB -->
+  <div class="view" id="view-portfolio">
+    <div id="portfolio-summary" class="portfolio-summary"></div>
+    <div class="port-chart-wrap">
+      <div class="port-chart-label">
+        <span>Portfolio Value Over Time (30 Days)</span>
+        <span id="port-chart-change" style="font-size:12px;"></span>
+      </div>
+      <canvas id="portfolio-chart"></canvas>
+    </div>
+    <div class="port-section-hdr">
+      <span>Owned Cards</span>
+      <button class="btn btn-primary" style="font-size:12px;padding:7px 14px;" onclick="openAddPortfolioModal()">+ Add Card</button>
+    </div>
+    <div id="port-cards-grid" class="port-cards-grid"></div>
+    <div id="port-empty" class="empty-state" style="display:none;">
+      <div class="empty-icon">💼</div>
+      <h3>Your portfolio is empty</h3>
+      <p>Add cards you own to track their current value and profit/loss</p>
+      <button class="btn btn-primary" style="margin-top:16px;" onclick="openAddPortfolioModal()">+ Add First Card</button>
+    </div>
+  </div>
+
+  <!-- ALERTS TAB -->
+  <div class="view" id="view-alerts">
+    <div class="alert-config-panel">
+      <h3>🔔 Alert Notifications</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="setting-row"><div><div class="setting-label">In-app banners</div><div class="setting-desc">Toast notifications when alerts fire</div></div><div class="toggle on" id="toggle-alert-toast" onclick="toggleEl('toggle-alert-toast')"></div></div>
+        <div class="setting-row"><div><div class="setting-label">Email / Webhook</div><div class="setting-desc">POST alert data to a URL (use with Zapier, Make, etc.)</div></div><div class="toggle" id="toggle-alert-webhook" onclick="toggleEl('toggle-alert-webhook')"></div></div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <label style="display:block;font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:7px;">Webhook / Zapier URL</label>
+          <input type="url" id="alert-webhook-url" placeholder="https://hooks.zapier.com/…" style="width:100%;" />
+        </div>
+        <div style="flex:1;min-width:200px;">
+          <label style="display:block;font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:7px;">Email (mailto fallback)</label>
+          <input type="email" id="alert-email" placeholder="you@email.com" style="width:100%;" />
+        </div>
+        <button class="btn btn-primary" style="white-space:nowrap;flex-shrink:0;" onclick="saveAlertConfig()">Save</button>
+      </div>
+    </div>
+    <div class="port-section-hdr">
+      <span>Active Price Alerts</span>
+      <span id="alerts-count" style="font-size:12px;color:var(--muted);"></span>
+    </div>
+    <div id="alerts-list"></div>
+    <div id="alerts-empty" class="empty-state" style="display:none;">
+      <div class="empty-icon">🔕</div>
+      <h3>No alerts configured</h3>
+      <p>Set a max price on any watchlist card to automatically create an alert</p>
+    </div>
+    <div style="margin-top:32px;" id="alerts-history-section" style="display:none;">
+      <div class="port-section-hdr"><span>Alert History</span></div>
+      <div id="alerts-history"></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS TAB -->
+  <div class="view" id="view-settings">
+    <div class="settings-grid">
+      <div class="settings-panel">
+        <h3>Price Data Config</h3>
+        <div class="setting-row"><div><div class="setting-label">Data Source</div><div class="setting-desc">Live prices served from your PokéWatch server via PokeTrace</div></div><span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--green);">&#9679; Connected</span></div>
+        <div class="setting-row"><div><div class="setting-label">Pokémon TCG API Key</div><div class="setting-desc">Free from <a href="https://dev.pokemontcg.io" target="_blank" style="color:var(--blue)">dev.pokemontcg.io</a> — enables card names in Catalogue</div></div><input type="password" id="tcg-api-key" placeholder="Optional free key…" style="width:200px;" /></div>
+        <div class="setting-row"><div><div class="setting-label">Demo Mode</div><div class="setting-desc">Use simulated prices (no API key needed)</div></div><div class="toggle on" id="toggle-demo" onclick="toggleDemo()"></div></div>
+        <div style="margin-top:16px;"><button class="btn btn-primary" onclick="saveApiKey()">Save Settings</button></div>
+      </div>
+      <div class="settings-panel">
+        <h3>Scan Settings</h3>
+        <div class="setting-row"><div><div class="setting-label">Auto-scan interval</div><div class="setting-desc">How often to check for new listings</div></div><select id="scan-interval" style="width:130px;"><option value="0">Manual only</option><option value="5">Every 5 min</option><option value="15" selected>Every 15 min</option><option value="30">Every 30 min</option><option value="60">Every hour</option></select></div>
+        <div class="setting-row"><div><div class="setting-label">Sound alerts</div><div class="setting-desc">Play sound on new listings</div></div><div class="toggle" id="toggle-sound" onclick="toggleEl('toggle-sound')"></div></div>
+        <div class="setting-row"><div><div class="setting-label">Browser notifications</div><div class="setting-desc">Desktop notifications for price alerts</div></div><div class="toggle" id="toggle-notif" onclick="requestNotifications()"></div></div>
+        <div class="setting-row"><div><div class="setting-label">Include auctions</div><div class="setting-desc">Show auction listings too</div></div><div class="toggle on" id="toggle-auctions" onclick="toggleEl('toggle-auctions')"></div></div>
+      </div>
+      <div class="settings-panel">
+        <h3>Filters</h3>
+        <div class="setting-row"><div><div class="setting-label">US sellers only</div><div class="setting-desc">Filter out international listings</div></div><div class="toggle on" id="toggle-us" onclick="toggleEl('toggle-us')"></div></div>
+        <div class="setting-row"><div><div class="setting-label">Free shipping only</div><div class="setting-desc">Only show free shipping listings</div></div><div class="toggle" id="toggle-shipping" onclick="toggleEl('toggle-shipping')"></div></div>
+      </div>
+      <div class="settings-panel">
+        <h3>Data</h3>
+        <div class="setting-row"><div><div class="setting-label">Export watchlist</div><div class="setting-desc">Download as JSON</div></div><button class="btn btn-secondary" onclick="exportData()">Export</button></div>
+        <div class="setting-row"><div><div class="setting-label">Clear all data</div><div class="setting-desc">Remove watchlist and listings</div></div><button class="btn btn-danger" onclick="clearData()">Clear</button></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="toast-container"></div>
+<div id="modal-root"></div>
+
+<script>
+// =====================================================================
+// GRADE CONFIG
+// =====================================================================
+const GRADES = [
+  { key: 'nm',   label: 'Near Mint',        color: '#57cc99', ptField: 'NEAR_MINT',        defaultOn: true  },
+  { key: 'lp',   label: 'Lightly Played',   color: '#ff9f1c', ptField: 'LIGHTLY_PLAYED',   defaultOn: false },
+  { key: 'mp',   label: 'Mod. Played',      color: '#a78bfa', ptField: 'MODERATELY_PLAYED',defaultOn: false },
+  { key: 'hp',   label: 'Heavily Played',   color: '#f87171', ptField: 'HEAVILY_PLAYED',   defaultOn: false },
+  { key: 'dmg',  label: 'Damaged',          color: '#94a3b8', ptField: 'DAMAGED',          defaultOn: false },
+];
+
+// Per-card grade visibility — persisted in chartState
+// gradeToggles[cardId] = { raw: true, psa9: false, psa10: true }
+
+// =====================================================================
+// PRICE HISTORY DATA ENGINE
+// =====================================================================
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// Base prices in DOLLARS for Raw NM
+const BASE_PRICES = {
+  'charizard':           700,
+  'pikachu illustrator': 900000,
+  'pikachu':             80,
+  'blastoise':           400,
+  'venusaur':            300,
+  'mewtwo':              200,
+  'gengar':              160,
+  'umbreon':             140,
+  'rayquaza':            80,
+  'lugia':               160,
+  'ho-oh':               120,
+};
+
+function getRawBasePrice(name) {
+  const low = (name || '').toLowerCase();
+  for (const [key, price] of Object.entries(BASE_PRICES)) {
+    if (low.includes(key)) return price;
+  }
+  return 60;
+}
+
+// Generates 30 days of sales for a given grade/multiplier
+function generateGradeSales(cardId, gradeKey, baseRawPrice, multiplier) {
+  const seedStr = cardId + gradeKey;
+  const seedNum = seedStr.split('').reduce((acc, c, i) => acc + c.charCodeAt(0) * (i + 1), 0) * 1009;
+  const rand = mulberry32(seedNum);
+
+  const basePrice = baseRawPrice * multiplier;
+  const days = 30;
+  const now = Date.now();
+  const sales = [];
+
+  let price = basePrice * (0.88 + rand() * 0.24);
+  const trend = (rand() - 0.47) * 0.006;
+  const vol   = 0.07 + rand() * 0.10;
+
+  for (let i = days; i >= 0; i--) {
+    const dayStart = now - i * 86400000;
+    const n = rand() < 0.35 ? 0 : Math.floor(rand() * 3) + 1;
+    for (let s = 0; s < n; s++) {
+      const noise = 1 + (rand() - 0.5) * vol * 2;
+      price = Math.max(basePrice * 0.2, price * (1 + trend) * noise);
+      sales.push({
+        t: dayStart + rand() * 86400000,
+        price: Math.round(price),
+        grade: gradeKey,
+        type: rand() > 0.45 ? 'buynow' : 'auction',
+      });
+    }
+  }
+  if (sales.length < 6) {
+    for (let i = days; i >= 0; i -= Math.ceil(days / 8)) {
+      price = basePrice * (0.85 + rand() * 0.3);
+      sales.push({ t: now - i * 86400000 + rand() * 86400000, price: Math.round(price), grade: gradeKey, type: 'buynow' });
+    }
+  }
+  return sales.sort((a, b) => a.t - b.t);
+}
+
+function generateAllGrades(card) {
+  const base = getRawBasePrice(card.name);
+  const result = {};
+  GRADES.forEach(g => {
+    result[g.key] = generateGradeSales(card.id, g.key, base, g.multiplier);
+  });
+  return result;
+}
+
+function computeStats(sales, days) {
+  const cutoff = Date.now() - days * 86400000;
+  const filtered = sales.filter(s => s.t >= cutoff);
+  if (!filtered.length) return null;
+  const prices = filtered.map(s => s.price);
+  const avg = prices.reduce((a,b) => a+b, 0) / prices.length;
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const third = Math.ceil(filtered.length / 3);
+  const earlyAvg = filtered.slice(0, third).map(s=>s.price).reduce((a,b)=>a+b,0) / Math.max(third,1);
+  const lateAvg  = filtered.slice(-third).map(s=>s.price).reduce((a,b)=>a+b,0) / Math.max(third,1);
+  const trendPct = ((lateAvg - earlyAvg) / earlyAvg) * 100;
+  return { avg, min, max, count: filtered.length, trendPct, data: filtered };
+}
+
+// =====================================================================
+// CHART ENGINE — multi-series canvas
+// =====================================================================
+const chartState = {};
+
+function drawMultiChart(canvas, gradeData, activeGrades, rangeDays, hover) {
+  // hover = { gradeKey, idx } | null
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+  if (!W || !H) return;
+
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const cutoff = Date.now() - rangeDays * 86400000;
+  const pad = { top: 10, right: 14, bottom: 4, left: 14 };
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top - pad.bottom;
+
+  // Collect all visible data to establish shared scales
+  const activeSeries = GRADES.filter(g => activeGrades[g.key]).map(g => ({
+    ...g,
+    data: (gradeData[g.key] || []).filter(s => s.t >= cutoff),
+  })).filter(s => s.data.length > 0);
+
+  if (!activeSeries.length) {
+    ctx.fillStyle = '#6b6b80';
+    ctx.font = '11px DM Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Enable at least one grade to view chart', W/2, H/2);
+    return;
+  }
+
+  const allPrices = activeSeries.flatMap(s => s.data.map(d => d.price));
+  const allTimes  = activeSeries.flatMap(s => s.data.map(d => d.t));
+  const minP = Math.min(...allPrices) * 0.95;
+  const maxP = Math.max(...allPrices) * 1.05;
+  const pRange = maxP - minP || 1;
+  const tMin = Math.min(...allTimes);
+  const tMax = Math.max(...allTimes);
+  const tRange = tMax - tMin || 86400000;
+
+  const toX = t => pad.left + ((t - tMin) / tRange) * cW;
+  const toY = p => pad.top + cH - ((p - minP) / pRange) * cH;
+
+  // Draw each series
+  activeSeries.forEach(series => {
+    const { data, color, key } = series;
+    if (data.length < 2) return;
+
+    // Gradient fill
+    const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + cH);
+    const rgb = hexToRgb(color);
+    grad.addColorStop(0, `rgba(${rgb},0.14)`);
+    grad.addColorStop(1, `rgba(${rgb},0.0)`);
+
+    ctx.beginPath();
+    ctx.moveTo(toX(data[0].t), toY(data[0].price));
+    for (let i = 1; i < data.length; i++) {
+      const cpx = (toX(data[i-1].t) + toX(data[i].t)) / 2;
+      ctx.bezierCurveTo(cpx, toY(data[i-1].price), cpx, toY(data[i].price), toX(data[i].t), toY(data[i].price));
+    }
+    ctx.lineTo(toX(data[data.length-1].t), pad.top + cH);
+    ctx.lineTo(toX(data[0].t), pad.top + cH);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    ctx.moveTo(toX(data[0].t), toY(data[0].price));
+    for (let i = 1; i < data.length; i++) {
+      const cpx = (toX(data[i-1].t) + toX(data[i].t)) / 2;
+      ctx.bezierCurveTo(cpx, toY(data[i-1].price), cpx, toY(data[i].price), toX(data[i].t), toY(data[i].price));
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // Average dashed line
+    const avgP = data.map(d=>d.price).reduce((a,b)=>a+b,0)/data.length;
+    ctx.beginPath();
+    ctx.setLineDash([4, 5]);
+    ctx.moveTo(pad.left, toY(avgP));
+    ctx.lineTo(pad.left + cW, toY(avgP));
+    ctx.strokeStyle = `rgba(${rgb},0.4)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Dots
+    data.forEach((d, i) => {
+      const isHover = hover && hover.gradeKey === key && hover.idx === i;
+      ctx.beginPath();
+      ctx.arc(toX(d.t), toY(d.price), isHover ? 5 : 2.5, 0, Math.PI*2);
+      ctx.fillStyle = isHover ? '#fff' : color;
+      ctx.globalAlpha = isHover ? 1 : 0.7;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      if (isHover) {
+        ctx.beginPath();
+        ctx.arc(toX(d.t), toY(d.price), 8, 0, Math.PI*2);
+        ctx.strokeStyle = `rgba(${rgb},0.35)`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    });
+  });
+
+  // Store per-series rendered data for hit testing
+  canvas._seriesData = activeSeries.map(s => ({ key: s.key, color: s.color, label: s.label, data: s.data, toX, toY }));
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `${r},${g},${b}`;
+}
+
+function initChart(cardId, canvas) {
+  const cs = chartState[cardId];
+  drawMultiChart(canvas, cs.gradeData, cs.activeGrades, cs.range, cs.hover);
+  canvas._cardId = cardId;
+
+  const wrap = canvas.parentElement;
+  let tip = wrap.querySelector('.chart-tooltip');
+  if (!tip) { tip = document.createElement('div'); tip.className = 'chart-tooltip'; wrap.appendChild(tip); }
+
+  canvas.onmousemove = function(e) {
+    const sd = this._seriesData;
+    if (!sd || !sd.length) return;
+    const rect = this.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+
+    // Find closest point across all series
+    let best = null, bestDist = Infinity;
+    sd.forEach(series => {
+      series.data.forEach((d, i) => {
+        const x = series.toX(d.t);
+        const dist = Math.abs(x - mx);
+        if (dist < bestDist) { bestDist = dist; best = { gradeKey: series.key, idx: i, d, color: series.color, label: series.label }; }
+      });
+    });
+    if (!best) return;
+
+    const cs = chartState[this._cardId];
+    cs.hover = { gradeKey: best.gradeKey, idx: best.idx };
+    drawMultiChart(this, cs.gradeData, cs.activeGrades, cs.range, cs.hover);
+
+    // Tooltip: show all series prices at same approximate time
+    const hoverT = best.d.t;
+    const lines = sd.map(series => {
+      // Find closest point in this series to hoverT
+      let closest = series.data[0], cDist = Infinity;
+      series.data.forEach(d => { const dist = Math.abs(d.t - hoverT); if (dist < cDist) { cDist = dist; closest = d; } });
+      return `<div><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${series.color};margin-right:6px;vertical-align:middle;"></span><span style="color:${series.color}">${series.label}</span>&nbsp;&nbsp;<b>$${closest.price.toLocaleString()}</b></div>`;
+    });
+    const dateStr = new Date(hoverT).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    tip.innerHTML = `<div style="color:var(--muted);margin-bottom:4px;font-size:10px;">${dateStr}</div>${lines.join('')}`;
+
+    tip.style.left = Math.min(mx + 12, rect.width - 170) + 'px';
+    tip.style.top  = Math.max(e.clientY - rect.top - 60, 4) + 'px';
+    tip.classList.add('visible');
+  };
+
+  canvas.onmouseleave = function() {
+    tip.classList.remove('visible');
+    const cs = chartState[this._cardId];
+    if (cs) { cs.hover = null; drawMultiChart(this, cs.gradeData, cs.activeGrades, cs.range, null); }
+  };
+}
+
+function switchChartRange(cardId, range) {
+  const cs = chartState[cardId];
+  if (!cs) return;
+  cs.range = range; cs.hover = null;
+  const canvas = document.querySelector(`[data-chart="${cardId}"]`);
+  if (canvas) drawMultiChart(canvas, cs.gradeData, cs.activeGrades, range, null);
+  document.querySelectorAll(`[data-chart-tab="${cardId}"]`).forEach(btn =>
+    btn.classList.toggle('active', parseInt(btn.dataset.range) === range)
+  );
+  renderXLabels(cardId, range);
+}
+
+function toggleGrade(cardId, gradeKey) {
+  const cs = chartState[cardId];
+  if (!cs) return;
+  const wasOn = cs.activeGrades[gradeKey];
+  // Prevent turning off if it's the last one active
+  const activeCount = Object.values(cs.activeGrades).filter(Boolean).length;
+  if (wasOn && activeCount === 1) { toast('At least one grade must be visible', 'error'); return; }
+  cs.activeGrades[gradeKey] = !wasOn;
+  cs.hover = null;
+
+  // Update button appearance
+  const btn = document.querySelector(`[data-grade-btn="${cardId}-${gradeKey}"]`);
+  if (btn) btn.classList.toggle('active', cs.activeGrades[gradeKey]);
+
+  // Redraw chart
+  const canvas = document.querySelector(`[data-chart="${cardId}"]`);
+  if (canvas) drawMultiChart(canvas, cs.gradeData, cs.activeGrades, cs.range, null);
+
+  // Show/hide stats rows
+  const row = document.getElementById(`grade-row-${cardId}-${gradeKey}`);
+  if (row) row.classList.toggle('hidden', !cs.activeGrades[gradeKey]);
+}
+
+function renderXLabels(cardId, days) {
+  const el = document.getElementById(`xlabels-${cardId}`);
+  if (!el) return;
+  const labels = [];
+  for (let i = 4; i >= 0; i--) {
+    const d = new Date(Date.now() - (days * (i / 4)) * 86400000);
+    labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+  }
+  el.innerHTML = labels.map(l => `<span>${l}</span>`).join('');
+}
+
+// =====================================================================
+// APP STATE
+// =====================================================================
+let state = {
+  watchlist: [],
+  listings: [],
+  portfolio: [],
+  firedAlerts: {},
+  alertWebhookUrl: '',
+  alertEmail: '',
+  demoMode: true,
+  pokeTraceApiKey: '',
+  tcgApiKey: '',
+  scanTimer: null,
+  lastScan: null,
+};
+
+// Settings persisted locally (preferences, not data)
+try {
+  const s = localStorage.getItem('pokewatch-settings');
+  if (s) {
+    const prefs = JSON.parse(s);
+    ['demoMode','tcgApiKey','alertWebhookUrl','alertEmail','lastScan'].forEach(k => {
+      if (prefs[k] !== undefined) state[k] = prefs[k];
+    });
+  }
+} catch(e) {}
+
+// ── Server API helpers ────────────────────────────────────────────────────────
+async function apiGet(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function apiPost(path, body) {
+  const r = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function apiDelete(path) {
+  const r = await fetch(path, { method:'DELETE' });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// ── Sync watchlist card to server ─────────────────────────────────────────────
+async function syncCardToServer(card) {
+  try {
+    await apiPost('/api/watchlist', {
+      id: card.id,
+      name: card.name,
+      set_name: card.set || null,
+      condition: card.condition || null,
+      max_price: card.maxPrice || null,
+    });
+  } catch(e) { console.warn('Failed to sync card to server:', e.message); }
+}
+
+// ── Sync portfolio item to server ─────────────────────────────────────────────
+async function syncPortfolioToServer(item) {
+  try {
+    await apiPost('/api/portfolio', {
+      id: item.id,
+      name: item.name,
+      set_name: item.set || null,
+      condition: item.condition || null,
+      purchase_price: item.purchasePrice || null,
+      purchase_date: item.purchaseDate || null,
+      notes: item.notes || null,
+    });
+  } catch(e) { console.warn('Failed to sync portfolio to server:', e.message); }
+}
+
+// =====================================================================
+// MOCK LISTINGS
+// =====================================================================
+// =====================================================================
+// MOCK LISTINGS (fallback when no API key / demo mode)
+// =====================================================================
+const mockListings = [
+  { title: "Charizard Base Set Holo 1st Edition PSA 10", price: 47500000, type: "auction", timeLeft: "2h 14m", seller: "pokevault_us",  url: "https://www.ebay.com/sch/i.html?_nkw=charizard+base+set+psa+10", id: "m1" },
+  { title: "Charizard Base Set Holo Shadowless PSA 9",   price:  850000,  type: "buynow",  timeLeft: null,     seller: "tcg_kings",     url: "https://www.ebay.com/sch/i.html?_nkw=charizard+shadowless+psa+9", id: "m2" },
+  { title: "Charizard Base Set Raw NM",                  price:   70000,  type: "auction", timeLeft: "1d 4h",  seller: "cardhaus",      url: "https://www.ebay.com/sch/i.html?_nkw=charizard+base+set+raw+nm", id: "m3" },
+  { title: "Pikachu Illustrator CGC 10",                 price: 90000000, type: "buynow",  timeLeft: null,     seller: "legendscards",  url: "https://www.ebay.com/sch/i.html?_nkw=pikachu+illustrator+cgc+10", id: "m4" },
+  { title: "Pikachu Base Set 1st Edition PSA 9",         price:  320000,  type: "auction", timeLeft: "3d 8h",  seller: "rarefinds_pkm", url: "https://www.ebay.com/sch/i.html?_nkw=pikachu+base+set+1st+edition+psa+9", id: "m5" },
+  { title: "Blastoise 1st Edition Holo PSA 9",           price:  450000,  type: "buynow",  timeLeft: null,     seller: "tcg_grails",    url: "https://www.ebay.com/sch/i.html?_nkw=blastoise+1st+edition+psa+9", id: "m6" },
+  { title: "Umbreon VMAX Alternate Art PSA 10",          price:  120000,  type: "buynow",  timeLeft: null,     seller: "pokefarm_us",   url: "https://www.ebay.com/sch/i.html?_nkw=umbreon+vmax+alt+art+psa+10", id: "m7" },
+];
+
+// =====================================================================
+// POKETRACE API  https://poketrace.com/developers
+// =====================================================================
+const POKETRACE_BASE = 'http://147.182.201.244';
+
+// Price cache: cardCacheKey -> { data, fetchedAt }
+const priceCache = {};
+
+async function fetchPokeTracePrices(cardName, setName) {
+  const cacheKey = (cardName + '|' + (setName || '')).toLowerCase();
+  const cached = priceCache[cacheKey];
+  if (cached && Date.now() - cached.fetchedAt < 15 * 60 * 1000) return cached.data; // 15-min cache
+
+  try {
+    const params = new URLSearchParams({ name: cardName });
+    if (setName) params.set('set', setName);
+    const res = await fetch(`${POKETRACE_BASE}/api/prices?${params}`);
+    if (!res.ok) throw new Error(`Server ${res.status}`);
+    const json = await res.json();
+    const card = (json.data || [])[0];
+    if (!card) return null;
+    priceCache[cacheKey] = { data: card, fetchedAt: Date.now() };
+    return card;
+  } catch(e) {
+    console.warn('Price fetch failed:', e.message);
+    return null;
+  }
+}
+
+// Convert PokeTrace price data into the sales-point array the chart engine expects.
+// PokeTrace gives us current avg/low/high per grade; we synthesise realistic
+// 30-day history by adding seeded noise around those anchors.
+function pokeTraceToSales(cardId, gradeKey, anchorPrice, low, high) {
+  if (!anchorPrice) return null;
+  const seedStr = cardId + gradeKey + 'live';
+  const seedNum = seedStr.split('').reduce((a,c,i) => a + c.charCodeAt(0)*(i+1), 0) * 1013;
+  const rand = mulberry32(seedNum);
+
+  const days = 30;
+  const now = Date.now();
+  const range = (high - low) || anchorPrice * 0.3;
+  const sales = [];
+  let price = anchorPrice * (0.92 + rand() * 0.16);
+  const trend = (rand() - 0.48) * 0.004;
+
+  for (let i = days; i >= 0; i--) {
+    const dayStart = now - i * 86400000;
+    const n = rand() < 0.3 ? 0 : Math.floor(rand() * 3) + 1;
+    for (let s = 0; s < n; s++) {
+      const noise = 1 + (rand() - 0.5) * (range / anchorPrice);
+      price = Math.max(low * 0.5, price * (1 + trend) * noise);
+      sales.push({
+        t: dayStart + rand() * 86400000,
+        price: Math.round(price * 100), // store as cents to match existing engine
+        grade: gradeKey,
+        type: rand() > 0.45 ? 'buynow' : 'auction',
+      });
+    }
+  }
+  // Always pin last data point to current anchor (makes chart accurate)
+  sales.push({ t: now, price: Math.round(anchorPrice * 100), grade: gradeKey, type: 'buynow' });
+  return sales.sort((a, b) => a.t - b.t);
+}
+
+// Grade key -> PokeTrace field mapping
+const GRADE_FIELD_MAP = {
+  raw:   ['NEAR_MINT', 'RAW', 'NM'],
+  dmg:  ['DAMAGED'],
+};
+function extractGradePrice(pokeTraceCard, gradeKey) {
+  const grade = GRADES.find(g => g.key === gradeKey);
+  if (!grade) return null;
+  const sources = ['ebay','tcgplayer'];
+  for (const src of sources) {
+    const p = pokeTraceCard.prices?.[src]?.[grade.ptField];
+    if (p && p.avg) return { avg: p.avg, low: p.low || p.avg, high: p.high || p.avg, source: src };
+  }
+  return null;
+}
+
+
+async function generateAllGradesLive(card) {
+  try {
+    if (!state.demoMode) {
+      const params = new URLSearchParams({ name: card.name });
+      if (card.set) params.set('set', card.set);
+      const res = await fetch(`/api/prices?${params}`);
+      if (res.ok) {
+        const json = await res.json();
+        const ptCard = (json.data || [])[0];
+        if (ptCard) {
+          const result = {};
+          GRADES.forEach(g => {
+            const priceData = extractGradePrice(ptCard, g.key);
+            if (priceData) {
+              // Build synthetic daily history from available avg data
+              const avg = priceData.avg;
+              const sales = [];
+              const now = Date.now();
+              for (let i = 29; i >= 0; i--) {
+                const jitter = avg * 0.04 * (Math.random() - 0.5);
+                sales.push({ t: now - i * 86400000, price: Math.round(avg + jitter), grade: g.key, type: 'buynow' });
+              }
+              result[g.key] = sales;
+            } else {
+              result[g.key] = [];
+            }
+          });
+          return { gradeData: result, source: 'live', ptCard };
+        }
+      }
+    }
+  } catch(e) {
+    console.warn('generateAllGradesLive failed:', e.message);
+  }
+  // Fallback: empty data
+  const result = {};
+  GRADES.forEach(g => { result[g.key] = []; });
+  return { gradeData: result, source: 'mock' };
+}
+
+
+// =====================================================================
+// RENDER WATCHLIST
+// =====================================================================
+function renderWatchlist() {
+  const el = document.getElementById('watchlist-cards');
+  if (!el) return;
+  if (!state.watchlist.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">👀</div><div class="empty-title">Nothing on your watchlist yet</div><div class="empty-desc">Add a card above to start tracking prices</div></div>`;
+    return;
+  }
+  el.innerHTML = state.watchlist.map(card => {
+    const cs = chartState[card.id];
+    const s7 = cs ? computeStats(cs.gradeData.nm || [], 7) : null;
+    const gradeBtns = GRADES.map(g => `
+      <button class="grade-btn ${cs && cs.activeGrades[g.key] ? 'active' : ''}"
+              data-grade="${g.key}"
+              onclick="toggleGrade('${card.id}', '${g.key}')">
+        <div class="grade-swatch" style="background:${g.color}"></div>
+        ${g.label}
+      </button>`).join('');
+    const gradeRows = GRADES.map(g => {
+      const s7g = cs ? computeStats(cs.gradeData[g.key] || [], 7) : null;
+      const s30g = cs ? computeStats(cs.gradeData[g.key] || [], 30) : null;
+      const hidden = cs ? !cs.activeGrades[g.key] : !g.defaultOn;
+      return `<div class="grade-stats-row ${hidden ? 'hidden' : ''}" id="grade-row-${card.id}-${g.key}">
+        <div class="grade-label-cell">
+          <div class="grade-dot" style="background:${g.color}"></div>
+          <div class="grade-label-text" style="color:${g.color}">${g.label}</div>
+        </div>
+        <div>${s7g ? '$'+fmtD(s7g.avg) : '—'}</div>
+        <div>${s7g ? '$'+fmtD(s7g.low)+' – $'+fmtD(s7g.high) : '—'}</div>
+        <div>${s30g ? '$'+fmtD(s30g.avg) : '—'}</div>
+      </div>`;
+    }).join('');
+    return `
+    <div class="card-row" id="card-${card.id}">
+      <div class="card-header">
+        <div class="card-info">
+          <div class="card-name">${card.name}</div>
+          <div class="card-meta">
+            ${card.set ? `<span class="tag">${card.set}</span>` : ''}
+            ${card.condition ? `<span class="tag grade">${card.condition}</span>` : ''}
+            ${card.maxPrice ? `<span class="tag">Max $${fmtD(card.maxPrice*100)}</span>` : ''}
+            ${card.lastChecked ? `<span class="tag muted">${timeAgo(card.lastChecked)}</span>` : ''}
+            ${card.newListingsCount > 0 ? `<span class="tag new-badge">${card.newListingsCount} new</span>` : ''}
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-sm" onclick="scanCard('${card.id}')">Scan</button>
+          <button class="btn btn-sm btn-danger" onclick="removeCard('${card.id}')">×</button>
+        </div>
+      </div>
+      <div class="chart-area">
+        <div class="grade-toggles">
+          <span class="grade-toggle-label">Series:</span>
+          ${gradeBtns}
+          <div class="chart-range-btns">
+            ${[7,14,30].map(d => `<button class="range-btn ${cs && cs.range===d?'active':''}" onclick="switchChartRange('${card.id}',${d})">${d}d</button>`).join('')}
+          </div>
+        </div>
+        <canvas data-chart="${card.id}" height="120" style="width:100%;cursor:crosshair;"
+          onmousemove="hoverChart(event,this,'${card.id}')"
+          onmouseleave="leaveChart(this,'${card.id}')"></canvas>
+        <div class="x-labels" id="xlabels-${card.id}"></div>
+        <div class="grade-stats-grid">
+          <div class="grade-stats-header">
+            <div style="padding-left:14px;">Condition</div>
+            <div>7d Avg</div><div>7d Range</div><div>30d Avg</div>
+          </div>
+          ${gradeRows}
+        </div>
+        <div class="source-badge" id="source-${card.id}">
+          ${cs ? (cs.source === 'live' ? '<span style="color:var(--green)">● Live</span>' : '<span style="color:var(--muted)">● Simulated</span>') : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Init charts after render
+  state.watchlist.forEach(card => {
+    const canvas = document.querySelector(`[data-chart="${card.id}"]`);
+    if (canvas && !chartState[card.id]) initChart(card.id, canvas);
+    else if (canvas && chartState[card.id]) {
+      const cs = chartState[card.id];
+      drawMultiChart(canvas, cs.gradeData, cs.activeGrades, cs.range, null);
+      renderXLabels(card.id, cs.range);
+    }
+  });
+}
+
+function addCard() {
+  const name = document.getElementById('card-name').value.trim();
+  const set = document.getElementById('card-set').value.trim();
+  const condition = document.getElementById('card-condition').value;
+  const maxPrice = parseFloat(document.getElementById('card-max-price').value) || null;
+  if (!name) { toast('Please enter a card name', 'error'); return; }
+  const card = {
+    id: Date.now().toString(),
+    name, set, condition, maxPrice,
+    addedAt: new Date().toISOString(),
+    lastChecked: null, newListingsCount: 0, seenIds: [],
+  };
+  state.watchlist.push(card);
+  save(); renderWatchlist(); updateStats();
+  syncCardToServer(card);
+  document.getElementById('card-name').value = '';
+  document.getElementById('card-set').value = '';
+  document.getElementById('card-max-price').value = '';
+  toast(`Added "${name}" to watchlist!`);
+}
+
+function removeCard(id) {
+  state.watchlist = state.watchlist.filter(c => c.id !== id);
+  state.listings = state.listings.filter(l => l.watchId !== id);
+  delete chartState[id];
+  save(); renderWatchlist(); renderListings(); updateStats();
+  toast('Card removed');
+  apiDelete('/api/watchlist/' + id).catch(e => console.warn('Failed to delete from server:', e.message));
+}
+
+// =====================================================================
+// RENDER LISTINGS
+// =====================================================================
+function renderListings() {
+  const el = document.getElementById('listings-grid');
+  if (!el) return;
+  if (!state.listings.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No listings yet</div><div class="empty-desc">Scan a card to see live listings</div></div>`;
+    return;
+  }
+  const sorted = [...state.listings].sort((a,b) => a.price - b.price);
+  el.innerHTML = sorted.map(l => {
+    const card = state.watchlist.find(c => c.id === l.watchId);
+    return `<div class="listing-card ${l.isNew ? 'listing-new' : ''}">
+      <div class="listing-title"><a href="${l.url}" target="_blank">${l.title}</a></div>
+      <div class="listing-meta">
+        <span class="listing-price">$${fmt(l.price)}</span>
+        <span class="tag">${l.type === 'auction' ? '⏱ Auction' : 'Buy Now'}</span>
+        ${l.timeLeft ? `<span class="tag muted">${l.timeLeft}</span>` : ''}
+        ${card ? `<span class="tag">${card.name}</span>` : ''}
+        ${l.isNew ? `<span class="tag new-badge">NEW</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function scanCard(cardId) {
+  const card = state.watchlist.find(c => c.id === cardId);
+  if (!card) return;
+  showScanStatus(true);
+  const results = await searchListings(card);
+  const newIds = results.filter(r => !card.seenIds.includes(r.id)).map(r => r.id);
+  card.seenIds = [...new Set([...card.seenIds, ...results.map(r => r.id)])];
+  card.lastChecked = new Date().toISOString();
+  card.newListingsCount = newIds.length;
+  state.listings = state.listings.filter(l => l.watchId !== cardId);
+  results.forEach(r => state.listings.push({ ...r, watchId: cardId, isNew: newIds.includes(r.id) }));
+  if (newIds.length > 0) { toast(`🎉 ${newIds.length} new listing${newIds.length > 1 ? 's' : ''} for ${card.name}!`); notifyUser(card.name, newIds.length, results.find(r => r.id === newIds[0])?.price); }
+  // Fire price alert if a listing is at or below threshold
+  if (card.maxPrice) {
+    const matching = results.filter(r => r.price <= card.maxPrice * 100);
+    if (matching.length > 0) {
+      const cheapest = matching.reduce((a,b) => a.price < b.price ? a : b);
+      fireAlert(card, cheapest);
+    }
+  }
+  save(); renderWatchlist(); renderListings(); updateStats(); showScanStatus(false);
+}
+
+async function scanAll() {
+  if (!state.watchlist.length) { toast('Add cards to your watchlist first', 'error'); return; }
+  for (const card of state.watchlist) await scanCard(card.id);
+  state.lastScan = new Date().toISOString();
+  document.getElementById('last-scan-time').textContent = 'Last scan: ' + timeAgo(state.lastScan);
+  save();
+}
+
+function showScanStatus(on) {
+  document.getElementById('scan-status').innerHTML = on ? '<div class="scan-indicator"><div class="scan-spinner"></div>Scanning eBay…</div>' : '';
+}
+function setupAutoScan() {
+  if (state.scanTimer) clearInterval(state.scanTimer);
+  const mins = parseInt(document.getElementById('scan-interval').value);
+  if (mins > 0) state.scanTimer = setInterval(scanAll, mins * 60000);
+}
+// =====================================================================
+// UI HELPERS
+// =====================================================================
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('view-' + name).classList.add('active');
+  if (name === 'catalogue') loadCatalogue();
+  if (name === 'portfolio') { renderPortfolio(); requestAnimationFrame(() => { const c = document.getElementById('portfolio-chart'); if(c) drawPortfolioChart(state.portfolio.map(item => ({...item, estVal: getEstimatedValue(item), pnl: 0, pnlPct: 0}))); }); }
+  if (name === 'alerts')    renderAlerts();
+}
+function toggleDemo() {
+  const el = document.getElementById('toggle-demo');
+  el.classList.toggle('on');
+  state.demoMode = el.classList.contains('on');
+  save();
+  toast(state.demoMode ? 'Demo mode ON — using simulated data' : 'Live mode ON — loading your data…');
+  Object.keys(chartState).forEach(k => delete chartState[k]);
+  state.watchlist = [];
+  state.portfolio = [];
+  init();
+}
+function toggleEl(id) { document.getElementById(id).classList.toggle('on'); }
+function updateStats() {
+  document.getElementById('stat-watching').textContent = state.watchlist.length;
+  document.getElementById('stat-listings').textContent = state.listings.length;
+}
+function toast(msg, type = 'success') {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast' + (type === 'error' ? ' error' : '');
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+// fmt: input cents → human dollars
+function fmt(cents) {
+  if (cents == null) return '—';
+  const d = cents / 100;
+  if (d >= 1000000) return (d/1000000).toFixed(2) + 'M';
+  if (d >= 10000)   return (d/1000).toFixed(1) + 'k';
+  if (d >= 1000)    return (d/1000).toFixed(2) + 'k';
+  return d.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+// fmtD: input dollars
+function fmtD(dollars) {
+  if (dollars == null) return '—';
+  if (dollars >= 1000000) return (dollars/1000000).toFixed(2) + 'M';
+  if (dollars >= 1000)    return (dollars/1000).toFixed(1) + 'k';
+  return dollars.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs/24)}d ago`;
+}
+function notifyUser(name, count, price) {
+  if ('Notification' in window && Notification.permission === 'granted')
+    new Notification('PokéWatch Alert', { body: `${count} new listing${count>1?'s':''} for ${name}${price?' from $'+fmt(price):''}` });
+}
+function requestNotifications() {
+  if ('Notification' in window)
+    Notification.requestPermission().then(p => {
+      if (p === 'granted') { document.getElementById('toggle-notif').classList.add('on'); toast('Browser notifications enabled!'); }
+      else toast('Notification permission denied', 'error');
+    });
+}
+function saveApiKey() {
+  state.tcgApiKey = document.getElementById('tcg-api-key').value.trim();
+  Object.keys(priceCache).forEach(k => delete priceCache[k]);
+  Object.keys(chartState).forEach(k => delete chartState[k]);
+  save(); toast('Settings saved — refreshing price data…'); setupAutoScan();
+  renderWatchlist();
+}
+function exportData() {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ watchlist: state.watchlist, listings: state.listings }, null, 2)], { type: 'application/json' }));
+  a.download = 'pokewatch-export.json'; a.click();
+}
+function clearData() {
+  if (!confirm('Clear all watchlist and listing data?')) return;
+  state.watchlist = []; state.listings = [];
+  save(); renderWatchlist(); renderListings(); updateStats();
+  toast('All data cleared');
+}
+function save() {
+  // Only save preferences locally — watchlist/portfolio live on the server
+  try {
+    localStorage.setItem('pokewatch-settings', JSON.stringify({
+      demoMode: state.demoMode,
+      tcgApiKey: state.tcgApiKey,
+      alertWebhookUrl: state.alertWebhookUrl,
+      alertEmail: state.alertEmail,
+      lastScan: state.lastScan,
+    }));
+  } catch(e) {}
+}
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    state.watchlist.forEach(card => {
+      const canvas = document.querySelector(`[data-chart="${card.id}"]`);
+      const cs = chartState[card.id];
+      if (canvas && cs) drawMultiChart(canvas, cs.gradeData, cs.activeGrades, cs.range, null);
+    });
+    const pCanvas = document.getElementById('portfolio-chart');
+    if (pCanvas && state.portfolio.length) drawPortfolioChart(state.portfolio.map(item => ({ ...item, estVal: getEstimatedValue(item), pnl: 0, pnlPct: 0 })));
+  }, 120);
+});
+
+// =====================================================================
+// INIT
+// =====================================================================
+async function init() {
+  if (!state.demoMode) document.getElementById('toggle-demo').classList.remove('on');
+  if (state.tcgApiKey)       document.getElementById('tcg-api-key').value       = state.tcgApiKey;
+  if (state.alertWebhookUrl) document.getElementById('alert-webhook-url').value = state.alertWebhookUrl;
+  if (state.alertEmail)      document.getElementById('alert-email').value       = state.alertEmail;
+  if (state.lastScan) document.getElementById('last-scan-time').textContent = 'Last scan: ' + timeAgo(state.lastScan);
+
+  // Show loading state
+  const wlEl = document.getElementById('watchlist-cards');
+  if (wlEl) wlEl.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading your watchlist…</div></div>';
+
+  if (!state.demoMode) {
+    // Load watchlist from server
+    try {
+      const wlData = await apiGet('/api/watchlist');
+      state.watchlist = wlData.map(row => ({
+        id: row.id,
+        name: row.name,
+        set: row.set_name || '',
+        condition: row.condition || '',
+        maxPrice: row.max_price || null,
+        addedAt: row.created_at ? new Date(row.created_at * 1000).toISOString() : new Date().toISOString(),
+        lastChecked: null,
+        newListingsCount: 0,
+        seenIds: [],
+      }));
+    } catch(e) {
+      console.warn('Failed to load watchlist from server:', e.message);
+      toast('Could not load watchlist from server', 'error');
+    }
+
+    // Load portfolio from server
+    try {
+      const portData = await apiGet('/api/portfolio');
+      state.portfolio = portData.map(row => ({
+        id: row.id,
+        name: row.name,
+        set: row.set_name || '',
+        condition: row.condition || '',
+        purchasePrice: row.purchase_price || null,
+        purchaseDate: row.purchase_date || '',
+        notes: row.notes || '',
+      }));
+    } catch(e) {
+      console.warn('Failed to load portfolio from server:', e.message);
+    }
+  } else {
+    // Demo mode — use sample data
+    if (!state.watchlist.length) {
+      state.watchlist = [
+        { id: 'demo1', name: 'Charizard',          set: 'Base Set',       condition: 'Near Mint', maxPrice: 500,    addedAt: new Date().toISOString(), lastChecked: null, newListingsCount: 0, seenIds: [] },
+        { id: 'demo2', name: 'Pikachu Illustrator', set: '',              condition: '',          maxPrice: 500000, addedAt: new Date().toISOString(), lastChecked: null, newListingsCount: 0, seenIds: [] },
+        { id: 'demo3', name: 'Umbreon VMAX',        set: 'Evolving Skies',condition: 'Near Mint', maxPrice: 200,    addedAt: new Date().toISOString(), lastChecked: null, newListingsCount: 2, seenIds: [] },
+      ];
+    }
+    if (!state.portfolio.length) {
+      state.portfolio = [
+        { id: 'p1', name: 'Charizard',    set: 'Base Set',       condition: 'Near Mint', purchasePrice: 400, purchaseDate: '2023-06-15', notes: '' },
+        { id: 'p2', name: 'Umbreon VMAX', set: 'Evolving Skies', condition: 'Near Mint', purchasePrice: 180, purchaseDate: '2024-01-20', notes: 'Alt Art' },
+        { id: 'p3', name: 'Gengar',       set: 'Fossil',         condition: 'Near Mint', purchasePrice: 85,  purchaseDate: '2024-03-02', notes: '' },
+      ];
+    }
+  }
+
+  renderWatchlist(); renderListings(); updateStats();
+}
+
+init();
+
+const TCG_API = 'https://api.pokemontcg.io/v2';
+const TCG_CDN = 'https://images.pokemontcg.io';
+
+// Complete English set catalogue — id matches CDN path
+const ALL_SETS = [
+  // ── Scarlet & Violet ───────────────────────────────────────────
+  { id:'sv9pt5',  name:'Destined Rivals',       series:'Scarlet & Violet', releaseDate:'2025/05/30', total:190, printedTotal:142 },
+  { id:'sv9',     name:'Journey Together',       series:'Scarlet & Violet', releaseDate:'2025/03/28', total:190, printedTotal:159 },
+  { id:'sv8pt5',  name:'Prismatic Evolutions',   series:'Scarlet & Violet', releaseDate:'2025/01/17', total:180, printedTotal:131 },
+  { id:'sv8',     name:'Surging Sparks',         series:'Scarlet & Violet', releaseDate:'2024/11/08', total:252, printedTotal:191 },
+  { id:'sv7',     name:'Stellar Crown',          series:'Scarlet & Violet', releaseDate:'2024/09/13', total:175, printedTotal:142 },
+  { id:'sv6pt5',  name:'Shrouded Fable',         series:'Scarlet & Violet', releaseDate:'2024/08/02', total:99,  printedTotal:64  },
+  { id:'sv6',     name:'Twilight Masquerade',    series:'Scarlet & Violet', releaseDate:'2024/05/24', total:226, printedTotal:167 },
+  { id:'sv5',     name:'Temporal Forces',        series:'Scarlet & Violet', releaseDate:'2024/03/22', total:218, printedTotal:162 },
+  { id:'sv4pt5',  name:'Paldean Fates',          series:'Scarlet & Violet', releaseDate:'2024/01/26', total:245, printedTotal:91  },
+  { id:'sv4',     name:'Paradox Rift',           series:'Scarlet & Violet', releaseDate:'2023/11/03', total:266, printedTotal:182 },
+  { id:'sv3pt5',  name:'151',                    series:'Scarlet & Violet', releaseDate:'2023/09/22', total:207, printedTotal:165 },
+  { id:'sv3',     name:'Obsidian Flames',        series:'Scarlet & Violet', releaseDate:'2023/08/11', total:230, printedTotal:197 },
+  { id:'sv2',     name:'Paldea Evolved',         series:'Scarlet & Violet', releaseDate:'2023/06/09', total:279, printedTotal:193 },
+  { id:'sv1',     name:'Scarlet & Violet',       series:'Scarlet & Violet', releaseDate:'2023/03/31', total:258, printedTotal:198 },
+  // ── Sword & Shield ─────────────────────────────────────────────
+  { id:'swsh12pt5',name:'Crown Zenith',          series:'Sword & Shield',   releaseDate:'2023/01/20', total:230, printedTotal:160 },
+  { id:'swsh12',  name:'Silver Tempest',         series:'Sword & Shield',   releaseDate:'2022/11/11', total:245, printedTotal:195 },
+  { id:'swsh11',  name:'Lost Origin',            series:'Sword & Shield',   releaseDate:'2022/09/09', total:217, printedTotal:196 },
+  { id:'swsh10',  name:'Astral Radiance',        series:'Sword & Shield',   releaseDate:'2022/05/27', total:246, printedTotal:189 },
+  { id:'swsh9',   name:'Brilliant Stars',        series:'Sword & Shield',   releaseDate:'2022/02/25', total:216, printedTotal:172 },
+  { id:'swsh8',   name:'Fusion Strike',          series:'Sword & Shield',   releaseDate:'2021/11/12', total:284, printedTotal:264 },
+  { id:'cel25',   name:'Celebrations',           series:'Sword & Shield',   releaseDate:'2021/10/08', total:50,  printedTotal:25  },
+  { id:'swsh7',   name:'Evolving Skies',         series:'Sword & Shield',   releaseDate:'2021/08/27', total:237, printedTotal:203 },
+  { id:'swsh6',   name:'Chilling Reign',         series:'Sword & Shield',   releaseDate:'2021/06/18', total:233, printedTotal:198 },
+  { id:'swsh5',   name:'Battle Styles',          series:'Sword & Shield',   releaseDate:'2021/03/19', total:183, printedTotal:163 },
+  { id:'swsh45',  name:'Shining Fates',          series:'Sword & Shield',   releaseDate:'2021/02/19', total:195, printedTotal:73  },
+  { id:'swsh4',   name:'Vivid Voltage',          series:'Sword & Shield',   releaseDate:'2020/11/13', total:203, printedTotal:185 },
+  { id:'swsh35',  name:"Champion's Path",        series:'Sword & Shield',   releaseDate:'2020/09/25', total:80,  printedTotal:73  },
+  { id:'swsh3',   name:'Darkness Ablaze',        series:'Sword & Shield',   releaseDate:'2020/08/14', total:201, printedTotal:189 },
+  { id:'swsh2',   name:'Rebel Clash',            series:'Sword & Shield',   releaseDate:'2020/05/01', total:209, printedTotal:192 },
+  { id:'swsh1',   name:'Sword & Shield',         series:'Sword & Shield',   releaseDate:'2020/02/07', total:216, printedTotal:202 },
+  // ── Sun & Moon ─────────────────────────────────────────────────
+  { id:'sm12',    name:'Cosmic Eclipse',         series:'Sun & Moon',       releaseDate:'2019/11/01', total:272, printedTotal:236 },
+  { id:'sm115',   name:'Hidden Fates',           series:'Sun & Moon',       releaseDate:'2019/08/23', total:163, printedTotal:68  },
+  { id:'sm11',    name:'Unified Minds',          series:'Sun & Moon',       releaseDate:'2019/08/02', total:270, printedTotal:236 },
+  { id:'sm10',    name:'Unbroken Bonds',         series:'Sun & Moon',       releaseDate:'2019/05/03', total:234, printedTotal:214 },
+  { id:'sm9',     name:'Team Up',                series:'Sun & Moon',       releaseDate:'2019/02/01', total:196, printedTotal:181 },
+  { id:'sm8',     name:'Lost Thunder',           series:'Sun & Moon',       releaseDate:'2018/11/02', total:236, printedTotal:214 },
+  { id:'sm75',    name:'Dragon Majesty',         series:'Sun & Moon',       releaseDate:'2018/09/07', total:80,  printedTotal:70  },
+  { id:'sm7',     name:'Celestial Storm',        series:'Sun & Moon',       releaseDate:'2018/08/03', total:187, printedTotal:168 },
+  { id:'sm6',     name:'Forbidden Light',        series:'Sun & Moon',       releaseDate:'2018/05/04', total:151, printedTotal:131 },
+  { id:'sm5',     name:'Ultra Prism',            series:'Sun & Moon',       releaseDate:'2018/02/02', total:173, printedTotal:156 },
+  { id:'sm45',    name:'Shining Legends',        series:'Sun & Moon',       releaseDate:'2017/10/06', total:78,  printedTotal:73  },
+  { id:'sm4',     name:'Crimson Invasion',       series:'Sun & Moon',       releaseDate:'2017/11/03', total:124, printedTotal:111 },
+  { id:'sm3',     name:'Burning Shadows',        series:'Sun & Moon',       releaseDate:'2017/08/05', total:169, printedTotal:147 },
+  { id:'sm2',     name:'Guardians Rising',       series:'Sun & Moon',       releaseDate:'2017/05/05', total:169, printedTotal:145 },
+  { id:'sm1',     name:'Sun & Moon',             series:'Sun & Moon',       releaseDate:'2017/02/03', total:163, printedTotal:149 },
+  // ── XY ─────────────────────────────────────────────────────────
+  { id:'xy12',    name:'Evolutions',             series:'XY',               releaseDate:'2016/11/02', total:113, printedTotal:108 },
+  { id:'xy11',    name:'Steam Siege',            series:'XY',               releaseDate:'2016/08/03', total:116, printedTotal:114 },
+  { id:'xy10',    name:'Fates Collide',          series:'XY',               releaseDate:'2016/05/02', total:129, printedTotal:124 },
+  { id:'xy9',     name:'BREAKpoint',             series:'XY',               releaseDate:'2016/02/03', total:123, printedTotal:122 },
+  { id:'xy8',     name:'BREAKthrough',           series:'XY',               releaseDate:'2015/11/04', total:162, printedTotal:162 },
+  { id:'xy75',    name:'Roaring Skies',          series:'XY',               releaseDate:'2015/05/06', total:109, printedTotal:108 },
+  { id:'xy7',     name:'Ancient Origins',        series:'XY',               releaseDate:'2015/08/19', total:100, printedTotal:98  },
+  { id:'xy6',     name:'Primal Clash',           series:'XY',               releaseDate:'2015/02/04', total:164, printedTotal:160 },
+  { id:'xy4',     name:'Phantom Forces',         series:'XY',               releaseDate:'2014/11/05', total:122, printedTotal:119 },
+  { id:'xy3',     name:'Furious Fists',          series:'XY',               releaseDate:'2014/08/13', total:114, printedTotal:111 },
+  { id:'xy2',     name:'Flashfire',              series:'XY',               releaseDate:'2014/05/07', total:109, printedTotal:106 },
+  { id:'xy1',     name:'XY',                     series:'XY',               releaseDate:'2014/02/05', total:146, printedTotal:146 },
+  // ── Black & White ──────────────────────────────────────────────
+  { id:'bw11',    name:'Legendary Treasures',    series:'Black & White',    releaseDate:'2013/11/06', total:140, printedTotal:113 },
+  { id:'bw10',    name:'Plasma Blast',           series:'Black & White',    releaseDate:'2013/08/14', total:105, printedTotal:101 },
+  { id:'bw9',     name:'Plasma Freeze',          series:'Black & White',    releaseDate:'2013/05/08', total:122, printedTotal:116 },
+  { id:'bw8',     name:'Plasma Storm',           series:'Black & White',    releaseDate:'2013/02/06', total:138, printedTotal:135 },
+  { id:'bw7',     name:'Boundaries Crossed',     series:'Black & White',    releaseDate:'2012/11/07', total:153, printedTotal:149 },
+  { id:'bw6',     name:'Dragons Exalted',        series:'Black & White',    releaseDate:'2012/08/15', total:128, printedTotal:124 },
+  { id:'bw5',     name:'Dark Explorers',         series:'Black & White',    releaseDate:'2012/05/09', total:111, printedTotal:108 },
+  { id:'bw4',     name:'Next Destinies',         series:'Black & White',    releaseDate:'2012/02/08', total:103, printedTotal:99  },
+  { id:'bw3',     name:'Noble Victories',        series:'Black & White',    releaseDate:'2011/11/16', total:102, printedTotal:98  },
+  { id:'bw2',     name:'Emerging Powers',        series:'Black & White',    releaseDate:'2011/08/31', total:98,  printedTotal:98  },
+  { id:'bw1',     name:'Black & White',          series:'Black & White',    releaseDate:'2011/04/25', total:115, printedTotal:114 },
+  // ── HeartGold SoulSilver ───────────────────────────────────────
+  { id:'col1',    name:'Call of Legends',        series:'HeartGold SoulSilver', releaseDate:'2011/02/09', total:106, printedTotal:95 },
+  { id:'hgss4',   name:'Triumphant',             series:'HeartGold SoulSilver', releaseDate:'2010/11/03', total:103, printedTotal:102 },
+  { id:'hgss3',   name:'Undaunted',              series:'HeartGold SoulSilver', releaseDate:'2010/08/18', total:91,  printedTotal:90 },
+  { id:'hgss2',   name:'Unleashed',              series:'HeartGold SoulSilver', releaseDate:'2010/05/12', total:96,  printedTotal:95 },
+  { id:'hgss1',   name:'HeartGold & SoulSilver', series:'HeartGold SoulSilver', releaseDate:'2010/02/10', total:124, printedTotal:123 },
+  // ── Diamond & Pearl ────────────────────────────────────────────
+  { id:'pl4',     name:'Arceus',                 series:'Diamond & Pearl',  releaseDate:'2009/11/04', total:111, printedTotal:99  },
+  { id:'pl3',     name:'Supreme Victors',        series:'Diamond & Pearl',  releaseDate:'2009/08/19', total:175, printedTotal:151 },
+  { id:'pl2',     name:'Rising Rivals',          series:'Diamond & Pearl',  releaseDate:'2009/05/16', total:120, printedTotal:111 },
+  { id:'pl1',     name:'Platinum',               series:'Diamond & Pearl',  releaseDate:'2009/02/11', total:133, printedTotal:127 },
+  { id:'dp7',     name:'Stormfront',             series:'Diamond & Pearl',  releaseDate:'2008/11/05', total:106, printedTotal:100 },
+  { id:'dp6',     name:'Legends Awakened',       series:'Diamond & Pearl',  releaseDate:'2008/08/20', total:146, printedTotal:138 },
+  { id:'dp5',     name:'Majestic Dawn',          series:'Diamond & Pearl',  releaseDate:'2008/05/21', total:100, printedTotal:100 },
+  { id:'dp4',     name:'Great Encounters',       series:'Diamond & Pearl',  releaseDate:'2008/02/13', total:106, printedTotal:106 },
+  { id:'dp3',     name:'Secret Wonders',         series:'Diamond & Pearl',  releaseDate:'2007/11/07', total:132, printedTotal:132 },
+  { id:'dp2',     name:'Mysterious Treasures',   series:'Diamond & Pearl',  releaseDate:'2007/08/22', total:124, printedTotal:123 },
+  { id:'dp1',     name:'Diamond & Pearl',        series:'Diamond & Pearl',  releaseDate:'2007/05/23', total:130, printedTotal:130 },
+  // ── EX Series ──────────────────────────────────────────────────
+  { id:'ex16',    name:'Power Keepers',          series:'EX',               releaseDate:'2007/02/14', total:108, printedTotal:108 },
+  { id:'ex15',    name:'Dragon Frontiers',       series:'EX',               releaseDate:'2006/11/08', total:101, printedTotal:101 },
+  { id:'ex14',    name:'Crystal Guardians',      series:'EX',               releaseDate:'2006/08/30', total:100, printedTotal:100 },
+  { id:'ex13',    name:'Holon Phantoms',         series:'EX',               releaseDate:'2006/05/03', total:110, printedTotal:110 },
+  { id:'ex12',    name:'Legend Maker',           series:'EX',               releaseDate:'2006/02/08', total:92,  printedTotal:92  },
+  { id:'ex11',    name:'Delta Species',          series:'EX',               releaseDate:'2005/10/31', total:114, printedTotal:113 },
+  { id:'ex10',    name:'Unseen Forces',          series:'EX',               releaseDate:'2005/08/17', total:145, printedTotal:115 },
+  { id:'ex9',     name:'Emerald',                series:'EX',               releaseDate:'2005/05/09', total:107, printedTotal:106 },
+  { id:'ex8',     name:'Deoxys',                 series:'EX',               releaseDate:'2005/02/14', total:108, printedTotal:107 },
+  { id:'ex7',     name:'Team Rocket Returns',    series:'EX',               releaseDate:'2004/11/08', total:111, printedTotal:109 },
+  { id:'ex6',     name:'FireRed & LeafGreen',    series:'EX',               releaseDate:'2004/08/30', total:116, printedTotal:112 },
+  { id:'ex5',     name:'Hidden Legends',         series:'EX',               releaseDate:'2004/06/14', total:102, printedTotal:101 },
+  { id:'ex4',     name:'Team Magma vs Team Aqua',series:'EX',               releaseDate:'2004/03/15', total:97,  printedTotal:95  },
+  { id:'ex3',     name:'Dragon',                 series:'EX',               releaseDate:'2003/11/24', total:100, printedTotal:97  },
+  { id:'ex2',     name:'Sandstorm',              series:'EX',               releaseDate:'2003/09/18', total:100, printedTotal:100 },
+  { id:'ex1',     name:'Ruby & Sapphire',        series:'EX',               releaseDate:'2003/07/01', total:109, printedTotal:109 },
+  // ── Classic / WotC ─────────────────────────────────────────────
+  { id:'ecard3',  name:'Skyridge',               series:'E-Card',           releaseDate:'2003/05/12', total:182, printedTotal:144 },
+  { id:'ecard2',  name:'Aquapolis',              series:'E-Card',           releaseDate:'2003/01/15', total:186, printedTotal:150 },
+  { id:'ecard1',  name:'Expedition Base Set',    series:'E-Card',           releaseDate:'2002/09/15', total:165, printedTotal:165 },
+  { id:'neo4',    name:'Neo Destiny',            series:'Neo',              releaseDate:'2002/02/28', total:113, printedTotal:105 },
+  { id:'neo3',    name:'Neo Revelation',         series:'Neo',              releaseDate:'2001/09/21', total:66,  printedTotal:66  },
+  { id:'neo2',    name:'Neo Discovery',          series:'Neo',              releaseDate:'2001/06/01', total:75,  printedTotal:75  },
+  { id:'neo1',    name:'Neo Genesis',            series:'Neo',              releaseDate:'2000/10/16', total:111, printedTotal:111 },
+  { id:'gym2',    name:"Gym Challenge",          series:'Gym',              releaseDate:'2000/10/16', total:132, printedTotal:132 },
+  { id:'gym1',    name:"Gym Heroes",             series:'Gym',              releaseDate:'2000/08/14', total:132, printedTotal:132 },
+  { id:'base6',   name:'Legendary Collection',   series:'Base',             releaseDate:'2002/05/24', total:110, printedTotal:110 },
+  { id:'base5',   name:'Team Rocket',            series:'Base',             releaseDate:'2000/04/24', total:83,  printedTotal:82  },
+  { id:'base4',   name:'Base Set 2',             series:'Base',             releaseDate:'2000/02/24', total:130, printedTotal:130 },
+  { id:'fossil',  name:'Fossil',                 series:'Base',             releaseDate:'1999/10/10', total:62,  printedTotal:62  },
+  { id:'jungle',  name:'Jungle',                 series:'Base',             releaseDate:'1999/06/16', total:64,  printedTotal:64  },
+  { id:'base1',   name:'Base Set',               series:'Base',             releaseDate:'1999/01/09', total:102, printedTotal:102 },
+];
+
+// Era definitions — keyed by series string
+const ERA_MAP = {
+  'Scarlet & Violet':        { key:'sv',   label:'Scarlet & Violet',       color:'#e63946' },
+  'Sword & Shield':          { key:'swsh', label:'Sword & Shield',          color:'#4cc9f0' },
+  'Sun & Moon':              { key:'sm',   label:'Sun & Moon',              color:'#ff9f1c' },
+  'XY':                      { key:'xy',   label:'XY',                      color:'#a78bfa' },
+  'Black & White':           { key:'bw',   label:'Black & White',           color:'#57cc99' },
+  'HeartGold SoulSilver':    { key:'hgss', label:'HeartGold SoulSilver',    color:'#f9e100' },
+  'Diamond & Pearl':         { key:'dp',   label:'Diamond & Pearl',         color:'#6b9fff' },
+  'EX':                      { key:'ex',   label:'EX Series',               color:'#ff6b9d' },
+  'E-Card':                  { key:'wotc', label:'Classic (WotC)',           color:'#ffd700' },
+  'Neo':                     { key:'wotc', label:'Classic (WotC)',           color:'#ffd700' },
+  'Gym':                     { key:'wotc', label:'Classic (WotC)',           color:'#ffd700' },
+  'Base':                    { key:'wotc', label:'Classic (WotC)',           color:'#ffd700' },
+};
+const ERAS = Object.values(ERA_MAP).filter((e,i,a) => a.findIndex(x=>x.key===e.key)===i);
+
+function getEra(setName, setSeries) {
+  return ERA_MAP[setSeries] || { key:'other', label:'Other Sets', color:'#6b6b80' };
+}
+
+function rarityClass(rarity) {
+  if (!rarity) return '';
+  const r = rarity.toLowerCase();
+  if (r.includes('secret') || r.includes('special illustration') || r.includes('hyper')) return 'secret';
+  if (r.includes('ultra') || r.includes('v max') || r.includes('vmax') || r.includes('full art') || r.includes('rainbow') || r.includes('alternate')) return 'ultra';
+  if (r.includes('holo') || r.includes('rare holo')) return 'holo';
+  if (r.includes('illustration') || r.includes('shiny')) return 'special';
+  return '';
+}
+
+// Cache
+var catAllSets = [];
+let catCurrentSet = null;
+let catCurrentCards = [];
+let catActiveEra = 'all';
+let catSearchQuery = '';
+
+function loadCatalogue() {
+  if (catAllSets.length) { renderSetGrid(); return; }
+  catAllSets = ALL_SETS;
+  buildEraFilters();
+  renderSetGrid();
+}
+
+function buildEraFilters() {
+  const container = document.getElementById('era-filters');
+  const eraKeys = new Set();
+  catAllSets.forEach(s => eraKeys.add(getEra(s.name, s.series).key));
+
+  const btns = [{ key: 'all', label: 'All Eras' }, ...ERAS.filter(e => eraKeys.has(e.key))];
+  container.innerHTML = btns.map(e => `
+    <button class="era-btn ${e.key === catActiveEra ? 'active' : ''}"
+            data-era="${e.key}"
+            onclick="setEraFilter('${e.key}')">
+      ${e.label}
+    </button>`).join('');
+}
+
+function setEraFilter(key) {
+  catActiveEra = key;
+  document.querySelectorAll('.era-btn').forEach(b => b.classList.toggle('active', b.dataset.era === key));
+  renderSetGrid();
+}
+
+function filterSets(q) {
+  catSearchQuery = q.toLowerCase();
+  renderSetGrid();
+}
+
+function renderSetGrid() {
+  const container = document.getElementById('cat-sets-container');
+  let sets = catAllSets;
+
+  if (catSearchQuery) {
+    sets = sets.filter(s => s.name.toLowerCase().includes(catSearchQuery) || (s.series||'').toLowerCase().includes(catSearchQuery));
+  }
+  if (catActiveEra !== 'all') {
+    sets = sets.filter(s => getEra(s.name, s.series).key === catActiveEra);
+  }
+
+  if (!sets.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><h3>No sets found</h3><p>Try a different search or era filter</p></div>';
+    return;
+  }
+
+  // Group by era
+  const grouped = {};
+  sets.forEach(s => {
+    const era = getEra(s.name, s.series);
+    if (!grouped[era.key]) grouped[era.key] = { era, sets: [] };
+    grouped[era.key].sets.push(s);
+  });
+
+  // Order eras: SV first (newest), WotC last
+  const eraOrder = ERAS.map(e => e.key).concat(['other']);
+  const sortedGroups = Object.values(grouped).sort((a, b) => {
+    const ai = eraOrder.indexOf(a.era.key);
+    const bi = eraOrder.indexOf(b.era.key);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+
+  container.innerHTML = sortedGroups.map((group, gi) => `
+    <div class="cat-era-section">
+      <div class="cat-era-heading">
+        <div class="cat-era-title" style="color:${group.era.color}">${group.era.label}</div>
+        <div class="cat-era-line"></div>
+        <div class="cat-era-count">${group.sets.length} set${group.sets.length !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="cat-sets-row">
+        ${group.sets.map((s, i) => {
+          const releaseYear = s.releaseDate ? s.releaseDate.substring(0, 4) : '';
+          const logoUrl = `${TCG_CDN}/${s.id}/logo.png`;
+          const delay = Math.min(i * 30, 600);
+          return `
+            <div class="cat-set-card" style="animation-delay:${delay}ms" onclick="openSetModal('${s.id}')">
+              <div class="cat-set-img-wrap">
+                ${logoUrl
+                  ? `<img class="cat-set-logo" src="${logoUrl}" alt="${s.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+                     <div class="cat-set-logo-placeholder" style="display:none">🃏</div>`
+                  : `<div class="cat-set-logo-placeholder">🃏</div>`}
+              </div>
+              <div class="cat-set-info">
+                <div class="cat-set-name">${s.name}</div>
+                <div class="cat-set-meta">
+                  <div class="cat-set-date">${releaseYear}</div>
+                  <div class="cat-set-count">${s.printedTotal || s.total || '?'} cards</div>
+                </div>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+
+// ---- Set modal ----
+async function openSetModal(setId) {
+  const set = catAllSets.find(s => s.id === setId);
+  if (!set) return;
+  catCurrentSet = set;
+  catCurrentCards = [];
+
+  const logoUrl = `${TCG_CDN}/${set.id}/logo.png`;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'set-modal-overlay';
+  overlay.onclick = (e) => { if (e.target === overlay) closeSetModal(); };
+
+  overlay.innerHTML = `
+    <div class="modal-panel" id="set-modal">
+      <div class="modal-header">
+        <div class="modal-header-left">
+          <img class="modal-set-logo" src="${logoUrl}" alt="${set.name}" onerror="this.style.display='none'">
+          <div>
+            <div class="modal-set-title">${set.name}</div>
+            <div class="modal-set-subtitle">${set.series} &middot; Released ${set.releaseDate} &middot; ${set.printedTotal || set.total || '?'} cards</div>
+          </div>
+        </div>
+        <button class="modal-close" onclick="closeSetModal()">&#x2715;</button>
+      </div>
+      <div class="modal-search-row">
+        <input class="modal-search" placeholder="Search cards..." oninput="filterModalCards(this.value)">
+        <div class="rarity-filters">
+          <button class="rarity-btn active" onclick="setRarityFilter(this,'all')">All</button>
+          <button class="rarity-btn" onclick="setRarityFilter(this,'holo')">Holo+</button>
+          <button class="rarity-btn" onclick="setRarityFilter(this,'ultra')">Ultra Rare</button>
+          <button class="rarity-btn" onclick="setRarityFilter(this,'secret')">Secret</button>
+        </div>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <div class="modal-loading"><div class="scan-spinner"></div> Loading cards...</div>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
+
+  // Load cards
+  await loadSetCards(setId);
+}
+
+let modalRarityFilter = 'all';
+let modalSearchQuery = '';
+
+async function loadSetCards(setId) {
+  const body = document.querySelector('#set-modal .modal-body');
+  if (!body) return;
+
+  // Try the API first (works when hosted or with CORS-enabled browser)
+  const apiKey = state.tcgApiKey || '';
+  const headers = apiKey ? { 'X-Api-Key': apiKey } : {};
+
+  try {
+    let page = 1, allCards = [];
+    while (true) {
+      const res = await fetch(
+        `${TCG_API}/cards?q=set.id:${setId}&orderBy=number&pageSize=250&page=${page}`,
+        { headers }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const cards = data.data || [];
+      allCards = allCards.concat(cards);
+      if (allCards.length >= (data.totalCount || 0) || cards.length === 0) break;
+      page++;
+    }
+    catCurrentCards = allCards;
+    modalRarityFilter = 'all';
+    modalSearchQuery = '';
+    renderModalCards();
+  } catch(e) {
+    // API unavailable (file://, rate-limit, etc.) — fall back to CDN image grid
+    // We know card numbers run 1..printedTotal for most sets
+    const set = catCurrentSet;
+    const count = set.printedTotal || set.total || 0;
+    catCurrentCards = Array.from({ length: count }, (_, i) => ({
+      id: `${setId}-${i+1}`,
+      name: `Card #${i+1}`,
+      number: String(i+1),
+      supertype: 'Pokémon',
+      rarity: '',
+      images: { small: `${TCG_CDN}/${setId}/${i+1}.png` },
+      _cdnOnly: true,
+    }));
+    modalRarityFilter = 'all';
+    modalSearchQuery = '';
+
+    // Show a note about CDN-only mode
+    const countEl = document.getElementById('modal-card-count');
+    if (countEl) countEl.innerHTML = `${count} cards &nbsp;<span style="color:var(--orange);font-size:9px;font-family:'DM Mono',monospace">CDN MODE — add a free API key in Settings for card names</span>`;
+
+    renderModalCards();
+  }
+}
+
+function renderModalCards() {
+  const modal = document.getElementById('set-modal');
+  if (!modal) return;
+
+  let cards = catCurrentCards;
+  if (modalSearchQuery) cards = cards.filter(c => c.name.toLowerCase().includes(modalSearchQuery));
+  if (modalRarityFilter !== 'all') {
+    cards = cards.filter(c => rarityClass(c.rarity) === modalRarityFilter);
+  }
+
+  const countEl = document.getElementById('modal-card-count');
+  if (countEl) countEl.textContent = `${cards.length} card${cards.length !== 1 ? 's' : ''}`;
+
+  const body = modal.querySelector('.modal-body');
+  if (!body) return;
+
+  if (!cards.length) {
+    body.innerHTML = '<div class="empty-state" style="padding:40px 0"><div class="empty-icon">🔍</div><h3>No cards match</h3></div>';
+    return;
+  }
+
+  // Check which are already on watchlist
+  const watchNames = new Set(state.watchlist.map(w => w.name.toLowerCase()));
+
+  body.innerHTML = `<div class="cards-grid">${cards.map(card => {
+    const imgUrl = card.images?.small || '';
+    const rc = rarityClass(card.rarity);
+    const onWatch = watchNames.has(card.name.toLowerCase());
+    const setName = catCurrentSet?.name || '';
+    return `
+      <div class="tcg-card ${onWatch ? 'on-watchlist' : ''}" id="tcgcard-${card.id.replace(/[^a-z0-9]/gi,'-')}">
+        <div class="tcg-card-img-wrap">
+          ${imgUrl
+            ? `<img class="tcg-card-img" src="${imgUrl}" alt="${card.name}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=tcg-card-img-placeholder>🃏</div>'">`
+            : `<div class="tcg-card-img-placeholder">🃏</div>`}
+        </div>
+        <div class="tcg-card-info">
+          <div class="tcg-card-name" title="${card.name}">${card.name}</div>
+          <div class="tcg-card-sub">${card.number}/${catCurrentSet?.printedTotal || '?'} · ${card.supertype || ''}</div>
+          ${card.rarity ? `<div class="rarity-badge ${rc}">${card.rarity}</div>` : ''}
+          <button class="btn-add-watch ${onWatch ? 'added' : ''}"
+                  data-card-name="${card.name.replace(/"/g,'&quot;')}"
+                  data-set-name="${setName.replace(/"/g,'&quot;')}"
+                  data-card-id="${card.id}"
+                  onclick="handleWatchBtn(this)">
+            ${onWatch ? '✓ On Watchlist' : '+ Watch'}
+          </button>
+        </div>
+      </div>`;
+  }).join('')}</div>`;
+}
+
+function filterModalCards(q) {
+  modalSearchQuery = q.toLowerCase();
+  renderModalCards();
+}
+
+function setRarityFilter(btn, filter) {
+  modalRarityFilter = filter;
+  document.querySelectorAll('.modal-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderModalCards();
+}
+
+function closeSetModal() {
+  const overlay = document.getElementById('set-modal-overlay');
+  if (overlay) overlay.remove();
+  document.body.style.overflow = '';
+  catCurrentSet = null;
+  catCurrentCards = [];
+}
+
+// ---- Add to watchlist modal ----
+function handleWatchBtn(btn) {
+  const cardName = btn.dataset.cardName;
+  const setName  = btn.dataset.setName;
+  const cardId   = btn.dataset.cardId;
+  openAddModal(cardName, setName, cardId);
+}
+
+function openAddModal(cardName, setName, cardId) {
+  const existing = document.getElementById('add-modal-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'add-modal-overlay';
+  overlay.id = 'add-modal-overlay';
+  overlay.dataset.cardName = cardName;
+  overlay.dataset.setName = setName;
+  overlay.dataset.cardId = cardId;
+  overlay.onclick = (e) => { if (e.target === overlay) closeAddModal(); };
+
+  // Build HTML without nested template literals
+  const div = document.createElement('div');
+  div.className = 'add-modal';
+  div.innerHTML =
+    '<h3>' + cardName + '</h3>' +
+    '<div class="add-modal-set">' + setName + '</div>' +
+    '<div class="form-group">' +
+      '<label>Condition</label>' +
+      '<select id="am-condition">' +
+        '<option value="">Any</option>' +
+        '<option value="Near Mint">Near Mint</option>' +
+        '<option value="Lightly Played">Lightly Played</option>' +
+        '<option value="Mod. Played">Mod. Played</option>' +
+        '<option value="Heavily Played">Heavily Played</option>' +
+        '<option value="Damaged">Damaged</option>' +
+      '</select>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Max Price Alert ($)</label>' +
+      '<input type="number" id="am-price" placeholder="e.g. 500" min="1" />' +
+    '</div>' +
+    '<div class="add-modal-actions">' +
+      '<button class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>' +
+      '<button class="btn btn-primary" onclick="confirmAddFromCatalogue()">Add to Watchlist</button>' +
+    '</div>';
+
+  overlay.appendChild(div);
+  document.body.appendChild(overlay);
+}
+
+function closeAddModal() {
+  const el = document.getElementById('add-modal-overlay');
+  if (el) el.remove();
+}
+
+function confirmAddFromCatalogue(cardName, setName, cardId) {
+  // If called without args, read from overlay dataset
+  const overlay = document.getElementById('add-modal-overlay');
+  if (!cardName && overlay) cardName = overlay.dataset.cardName;
+  if (!setName  && overlay) setName  = overlay.dataset.setName;
+  if (!cardId   && overlay) cardId   = overlay.dataset.cardId;
+  const condition = document.getElementById('am-condition').value;
+  const maxPrice  = parseFloat(document.getElementById('am-price').value) || null;
+
+  const card = {
+    id: Date.now().toString(),
+    name: cardName,
+    set: setName,
+    condition,
+    maxPrice,
+    addedAt: new Date().toISOString(),
+    lastChecked: null,
+    newListingsCount: 0,
+    seenIds: [],
+    tcgId: cardId,
+  };
+
+  state.watchlist.push(card);
+  save();
+  renderWatchlist();
+  updateStats();
+  closeAddModal();
+  syncCardToServer(card);
+
+  // Update the card button in the set modal if still open
+  const safId = cardId.replace(/[^a-z0-9]/gi, '-');
+  const cardEl = document.getElementById(`tcgcard-${safId}`);
+  if (cardEl) {
+    cardEl.classList.add('on-watchlist');
+    const btn = cardEl.querySelector('.btn-add-watch');
+    if (btn) { btn.textContent = '✓ On Watchlist'; btn.classList.add('added'); }
+  }
+
+  toast(`Added "${cardName}" to watchlist!`);
+}
+function fireAlert(card, listing) {
+  const key = `alert-${card.id}-${listing.id}`;
+  if (state.firedAlerts && state.firedAlerts[key]) return; // already fired
+  if (!state.firedAlerts) state.firedAlerts = {};
+  state.firedAlerts[key] = { cardName: card.name, price: listing.price, firedAt: new Date().toISOString(), url: listing.url, title: listing.title };
+
+  // In-app toast
+  if (document.getElementById('toggle-alert-toast')?.classList.contains('on')) {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.style.cssText = 'border-left: 3px solid var(--yellow); cursor:pointer;';
+    t.innerHTML = `<div style="font-weight:600;color:var(--yellow);margin-bottom:3px;">🔔 Price Alert: ${card.name}</div><div style="font-size:12px;color:var(--muted);">${listing.title.substring(0,60)}… at <b style="color:var(--green)">$${fmt(listing.price)}</b></div>`;
+    t.onclick = () => window.open(listing.url, '_blank');
+    c.appendChild(t);
+    setTimeout(() => t.remove(), 8000);
+  }
+
+  // Webhook / email
+  const webhookUrl = state.alertWebhookUrl || '';
+  const email = state.alertEmail || '';
+  if (document.getElementById('toggle-alert-webhook')?.classList.contains('on')) {
+    if (webhookUrl) {
+      fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: 'price_alert', cardName: card.name, condition: card.condition, threshold: card.maxPrice, listingPrice: listing.price / 100, listingTitle: listing.title, url: listing.url, firedAt: new Date().toISOString() })
+      }).catch(() => {});
+    }
+    if (email) {
+      const subject = encodeURIComponent(`PokéWatch Alert: ${card.name} at $${(listing.price/100).toFixed(2)}`);
+      const body = encodeURIComponent(`Your PokéWatch alert fired!\n\nCard: ${card.name} ${card.condition || ''}\nListing: ${listing.title}\nPrice: $${(listing.price/100).toFixed(2)}\nYour threshold: $${card.maxPrice}\nView: ${listing.url}\n\nSent by PokéWatch`);
+      window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_blank');
+    }
+  }
+
+  save(); renderAlerts();
+}
+
+function saveAlertConfig() {
+  state.alertWebhookUrl = document.getElementById('alert-webhook-url').value.trim();
+  state.alertEmail = document.getElementById('alert-email').value.trim();
+  save(); toast('Alert settings saved');
+}
+
+function renderAlerts() {
+  const list = document.getElementById('alerts-list');
+  const empty = document.getElementById('alerts-empty');
+  const countEl = document.getElementById('alerts-count');
+  const historySec = document.getElementById('alerts-history-section');
+  const historyEl = document.getElementById('alerts-history');
+
+  const watchedWithAlerts = state.watchlist.filter(c => c.maxPrice);
+  const fired = Object.values(state.firedAlerts || {});
+
+  countEl.textContent = watchedWithAlerts.length + ' active';
+
+  if (!watchedWithAlerts.length) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  list.innerHTML = watchedWithAlerts.map(card => {
+    const cs = chartState[card.id];
+    const raw7 = cs ? computeStats(cs.gradeData.nm || [], 7) : null;
+    const currentAvg = raw7 ? raw7.avg / 100 : null; // to dollars
+    const hasFired = fired.some(f => f.cardName === card.name);
+    const statusClass = hasFired ? 'fired' : 'watching';
+    const dotClass = hasFired ? 'fired' : 'watching';
+
+    return `
+      <div class="alert-card ${hasFired ? 'fired' : ''}">
+        <div class="alert-dot ${dotClass}"></div>
+        <div class="alert-info">
+          <div class="alert-name">${card.name}${card.set ? ` — ${card.set}` : ''}</div>
+          <div class="alert-desc">
+            ${card.condition || 'Any condition'} ·
+            ${currentAvg ? `Raw avg $${fmtD(currentAvg)}` : 'Scan to get current avg'} ·
+            ${hasFired ? '<span style="color:var(--red)">Alert fired ✓</span>' : '<span style="color:var(--yellow)">Watching…</span>'}
+          </div>
+        </div>
+        <div class="alert-threshold ${hasFired ? 'fired' : ''}">≤ $${fmtD(card.maxPrice)}</div>
+        <button class="btn btn-secondary" style="font-size:11px;padding:5px 10px;flex-shrink:0;" onclick="clearAlert('${card.id}')">Reset</button>
+      </div>`;
+  }).join('');
+
+  // Alert history
+  if (fired.length) {
+    historySec.style.display = 'block';
+    historyEl.innerHTML = fired.sort((a,b) => new Date(b.firedAt) - new Date(a.firedAt)).slice(0,20).map(f => `
+      <div class="alert-card sent" style="border-left-color:var(--green);">
+        <div class="alert-dot sent"></div>
+        <div class="alert-info">
+          <div class="alert-name">${f.cardName}</div>
+          <div class="alert-desc">${f.title?.substring(0,70)}… · ${timeAgo(f.firedAt)}</div>
+        </div>
+        <div class="alert-threshold" style="color:var(--green);">$${fmt(f.price)}</div>
+        ${f.url && f.url !== '#' ? `<a href="${f.url}" target="_blank" class="btn-view" style="flex-shrink:0;">View ↗</a>` : ''}
+      </div>`).join('');
+  } else {
+    historySec.style.display = 'none';
+  }
+}
+
+function clearAlert(cardId) {
+  if (!state.firedAlerts) return;
+  const card = state.watchlist.find(c => c.id === cardId);
+  if (!card) return;
+  Object.keys(state.firedAlerts).forEach(k => { if (k.startsWith(`alert-${cardId}-`)) delete state.firedAlerts[k]; });
+  save(); renderAlerts(); toast('Alert reset');
+}
+
+// =====================================================================
+// PORTFOLIO
+// =====================================================================
+// portfolio item: { id, name, set, condition, purchasePrice (dollars), purchaseDate, tcgImg, notes }
+
+function openAddPortfolioModal(prefill) {
+  const el = document.getElementById('modal-root');
+  el.innerHTML = `
+    <div class="add-modal-overlay" id="port-modal-overlay" onclick="e => { if(e.target===this) closePortModal() }">
+      <div class="add-modal" style="width:440px;" onclick="event.stopPropagation()">
+        <h3>${prefill ? 'Edit Card' : 'Add to Portfolio'}</h3>
+        <div class="add-modal-set" style="margin-bottom:18px;">Track a card you own</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group" style="grid-column:span 2;">
+            <label>Card Name</label>
+            <input type="text" id="pm-name" placeholder="e.g. Charizard" value="${prefill?.name||''}" />
+          </div>
+          <div class="form-group">
+            <label>Set</label>
+            <input type="text" id="pm-set" placeholder="e.g. Base Set" value="${prefill?.set||''}" />
+          </div>
+          <div class="form-group">
+            <label>Condition / Grade</label>
+            <select id="pm-condition">
+              ${['Near Mint','Lightly Played','Mod. Played','Heavily Played','Damaged'].map(c => `<option ${(prefill?.condition||''===c)?'selected':''}>${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Purchase Price ($)</label>
+            <input type="number" id="pm-price" placeholder="e.g. 450.00" value="${prefill?.purchasePrice||''}" min="0" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Purchase Date</label>
+            <input type="date" id="pm-date" value="${prefill?.purchaseDate || new Date().toISOString().split('T')[0]}" />
+          </div>
+          <div class="form-group" style="grid-column:span 2;">
+            <label>Notes (optional)</label>
+            <input type="text" id="pm-notes" placeholder="e.g. 1st edition, bought at auction" value="${prefill?.notes||''}" />
+          </div>
+        </div>
+        <div class="add-modal-actions" style="margin-top:20px;">
+          <button class="btn btn-secondary" onclick="closePortModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="savePortfolioCard('${prefill?.id||''}')">
+            ${prefill ? 'Save Changes' : 'Add to Portfolio'}
+          </button>
+        </div>
+      </div>
+    </div>`;
+  document.body.style.overflow = 'hidden';
+}
+
+function closePortModal() {
+  document.getElementById('modal-root').innerHTML = '';
+  document.body.style.overflow = '';
+}
+
+function savePortfolioCard(editId) {
+  const name = document.getElementById('pm-name').value.trim();
+  if (!name) { toast('Enter a card name', 'error'); return; }
+  const item = {
+    id: editId || Date.now().toString(),
+    name,
+    set: document.getElementById('pm-set').value.trim(),
+    condition: document.getElementById('pm-condition').value,
+    purchasePrice: parseFloat(document.getElementById('pm-price').value) || 0,
+    purchaseDate: document.getElementById('pm-date').value,
+    notes: document.getElementById('pm-notes').value.trim(),
+  };
+  if (editId) {
+    const idx = state.portfolio.findIndex(p => p.id === editId);
+    if (idx >= 0) state.portfolio[idx] = item;
+  } else {
+    state.portfolio.push(item);
+  syncPortfolioToServer(item);
+  }
+  save(); closePortModal(); renderPortfolio();
+  toast(editId ? 'Card updated' : `"${name}" added to portfolio`);
+}
+
+function removePortfolioCard(id) {
+  if (!confirm('Remove this card from your portfolio?')) return;
+  state.portfolio = state.portfolio.filter(p => p.id !== id);
+  save(); renderPortfolio(); toast('Card removed');
+}
+
+// PokeTrace portfolio price cache
+var portPriceCache = {};
+
+function getEstimatedValue(item) {
+  // Check live cache first (populated by fetchPortfolioPrices)
+  const cacheKey = (item.name + '|' + (item.set || '') + '|' + item.condition).toLowerCase();
+  if (portPriceCache[cacheKey] !== undefined) return portPriceCache[cacheKey];
+
+  // Fallback: seeded mock
+  const fakeId = 'port-' + item.name.toLowerCase().replace(/\s+/g,'-');
+  const baseRaw = getRawBasePrice(item.name);
+  const condToGrade = { 'Near Mint':'nm','Lightly Played':'lp','Mod. Played':'mp','Heavily Played':'hp','Damaged':'dmg' };
+  const condMulti  = { 'Near Mint':1.0,'Lightly Played':.8,'Mod. Played':.6,'Heavily Played':.4,'Damaged':.25 };
+  const gradeKey = condToGrade[item.condition] || 'nm';
+  const gradeMulti = condMulti[item.condition] || 1.0;
+  const sales = generateGradeSales(fakeId, gradeKey, baseRaw, gradeMulti);
+  const stats7 = computeStats(sales, 7);
+  return stats7 ? (stats7.avg / 100) : (baseRaw * gradeMulti);
+}
+
+// Async: pre-fetch live prices for all portfolio items, then re-render
+async function fetchPortfolioPrices() {
+  if (state.demoMode) return;
+  for (const item of state.portfolio) {
+    const ptCard = await fetchPokeTracePrices(item.name, item.set);
+    if (!ptCard) continue;
+    // Map condition to PokeTrace grade key
+    const gradeKeyMap = { 'Near Mint':'nm','Lightly Played':'lp','Mod. Played':'mp','Heavily Played':'hp','Damaged':'dmg' };
+    const gk = gradeKeyMap[item.condition] || 'nm';
+    const priceData = extractGradePrice(ptCard, gk);
+    if (priceData?.avg) {
+      const cacheKey = (item.name + '|' + (item.set || '') + '|' + item.condition).toLowerCase();
+      portPriceCache[cacheKey] = priceData.avg;
+    }
+  }
+  renderPortfolio();
+}
+
+function renderPortfolio() {
+  const grid = document.getElementById('port-cards-grid');
+  const empty = document.getElementById('port-empty');
+  const summary = document.getElementById('portfolio-summary');
+
+  if (!state.portfolio.length) {
+    grid.innerHTML = ''; summary.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  // Compute totals
+  let totalCost = 0, totalValue = 0;
+  const enriched = state.portfolio.map(item => {
+    const estVal = getEstimatedValue(item);
+    const pnl = estVal - item.purchasePrice;
+    const pnlPct = item.purchasePrice ? (pnl / item.purchasePrice) * 100 : 0;
+    totalCost  += item.purchasePrice;
+    totalValue += estVal;
+    return { ...item, estVal, pnl, pnlPct };
+  });
+  const totalPnl = totalValue - totalCost;
+  const totalPnlPct = totalCost ? (totalPnl / totalCost) * 100 : 0;
+  const pnlClass = totalPnl >= 0 ? 'pstat-up' : 'pstat-down';
+
+  summary.innerHTML = `
+    <div class="port-stat-card pstat-count">
+      <div class="port-stat-label">Cards Owned</div>
+      <div class="port-stat-value">${state.portfolio.length}</div>
+      <div class="port-stat-sub">in your portfolio</div>
+    </div>
+    <div class="port-stat-card pstat-cost">
+      <div class="port-stat-label">Total Cost Basis</div>
+      <div class="port-stat-value">$${fmtD(totalCost)}</div>
+      <div class="port-stat-sub">what you paid</div>
+    </div>
+    <div class="port-stat-card pstat-val">
+      <div class="port-stat-label">Estimated Value</div>
+      <div class="port-stat-value" style="color:var(--blue);">$${fmtD(totalValue)}</div>
+      <div class="port-stat-sub">based on 7-day avg</div>
+    </div>
+    <div class="port-stat-card ${pnlClass}">
+      <div class="port-stat-label">Total P&L</div>
+      <div class="port-stat-value" style="color:${totalPnl>=0?'var(--green)':'var(--red)'};">
+        ${totalPnl>=0?'+':''}$${fmtD(Math.abs(totalPnl))}
+      </div>
+      <div class="port-stat-sub">${totalPnlPct>=0?'+':''}${totalPnlPct.toFixed(1)}% overall</div>
+    </div>`;
+
+  // Portfolio value chart (30-day simulated total)
+  drawPortfolioChart(enriched);
+  // Kick off live price fetch (will re-render when done)
+  fetchPortfolioPrices();
+
+  // Cards grid
+  grid.innerHTML = enriched.map((item, i) => {
+    const pnlClass = item.pnl > 0 ? 'up' : item.pnl < 0 ? 'down' : 'flat';
+    const pnlSign  = item.pnl > 0 ? '+' : '';
+    const imgUrl = `https://images.pokemontcg.io/sv3pt5/${Math.min(i+1,165)}.png`; // placeholder art
+    return `
+      <div class="port-card" style="animation-delay:${i*40}ms">
+        <div class="port-card-header">
+          <img class="port-tcg-img" src="${imgUrl}" onerror="this.style.opacity='.15'" loading="lazy" alt="">
+          <div style="flex:1;min-width:0;">
+            <div class="port-card-name">${item.name}</div>
+            <div class="port-card-meta">
+              ${item.set ? `<span class="tag">${item.set}</span>` : ''}
+              <span class="tag grade">${item.condition}</span>
+            </div>
+            ${item.notes ? `<div style="font-size:11px;color:var(--muted);margin-top:5px;">${item.notes}</div>` : ''}
+          </div>
+        </div>
+        <div class="port-card-body">
+          <div class="port-cell">
+            <div class="port-cell-lbl">Paid</div>
+            <div class="port-cell-val">$${fmtD(item.purchasePrice)}</div>
+          </div>
+          <div class="port-cell">
+            <div class="port-cell-lbl">Est. Value</div>
+            <div class="port-cell-val" style="color:var(--blue);">$${fmtD(item.estVal)}</div>
+          </div>
+          <div class="port-cell">
+            <div class="port-cell-lbl">P&L</div>
+            <div class="port-cell-val" style="color:${item.pnl>=0?'var(--green)':'var(--red)'};">
+              ${pnlSign}$${fmtD(Math.abs(item.pnl))}
+            </div>
+          </div>
+        </div>
+        <div class="port-card-footer">
+          <span class="pnl-badge ${pnlClass}">${pnlSign}${item.pnlPct.toFixed(1)}%</span>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-secondary" style="font-size:11px;padding:5px 10px;"
+                data-port-id="${item.id}"
+                onclick="openAddPortfolioModal(state.portfolio.find(p=>p.id===this.dataset.portId))">Edit</button>
+            <button class="btn btn-danger" style="font-size:11px;padding:5px 10px;" onclick="removePortfolioCard('${item.id}')">✕</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function drawPortfolioChart(enriched) {
+  const canvas = document.getElementById('portfolio-chart');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth || canvas.parentElement.offsetWidth;
+  const H = 140;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  // Generate 30-day daily portfolio values
+  const days = 30;
+  const dailyVals = [];
+  for (let d = days; d >= 0; d--) {
+    const dayT = Date.now() - d * 86400000;
+    let totalAtDay = 0;
+    enriched.forEach(item => {
+      const fakeId = 'port-' + item.name.toLowerCase().replace(/\s+/g,'-');
+      const baseRaw = getRawBasePrice(item.name);
+      const gm = { 'Near Mint':1,'Lightly Played':.8,'Mod. Played':.6,'Heavily Played':.4,'Damaged':.25 }[item.condition] || 1;
+      const sales = generateGradeSales(fakeId, item.condition, baseRaw, gm);
+      const past = sales.filter(s => s.t <= dayT);
+      const recent = past.slice(-5);
+      const avg = recent.length ? recent.reduce((a,s)=>a+s.price,0)/recent.length/100 : item.purchasePrice;
+      totalAtDay += avg;
+    });
+    dailyVals.push({ t: dayT, v: totalAtDay });
+  }
+
+  // Update change label
+  const first = dailyVals[0].v, last = dailyVals[dailyVals.length-1].v;
+  const chg = last - first, chgPct = first ? (chg/first*100) : 0;
+  const chgEl = document.getElementById('port-chart-change');
+  if (chgEl) chgEl.innerHTML = `<span style="color:${chg>=0?'var(--green)':'var(--red)'};">${chg>=0?'+':''}$${fmtD(Math.abs(chg))} (${chgPct>=0?'+':''}${chgPct.toFixed(1)}%) last 30 days</span>`;
+
+  const pad = { t:12, r:14, b:8, l:14 };
+  const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b;
+  const vals = dailyVals.map(d=>d.v);
+  const minV = Math.min(...vals) * 0.97, maxV = Math.max(...vals) * 1.03;
+  const vRange = maxV - minV || 1;
+  const toX = i => pad.l + (i / (dailyVals.length-1)) * cW;
+  const toY = v => pad.t + cH - ((v - minV) / vRange) * cH;
+
+  // Gradient
+  const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + cH);
+  grad.addColorStop(0, 'rgba(76,201,240,0.18)');
+  grad.addColorStop(1, 'rgba(76,201,240,0.0)');
+
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(dailyVals[0].v));
+  dailyVals.forEach((d,i) => { if(i>0) { const cpx=(toX(i-1)+toX(i))/2; ctx.bezierCurveTo(cpx,toY(dailyVals[i-1].v),cpx,toY(d.v),toX(i),toY(d.v)); } });
+  ctx.lineTo(toX(dailyVals.length-1), pad.t+cH);
+  ctx.lineTo(toX(0), pad.t+cH);
+  ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(dailyVals[0].v));
+  dailyVals.forEach((d,i) => { if(i>0) { const cpx=(toX(i-1)+toX(i))/2; ctx.bezierCurveTo(cpx,toY(dailyVals[i-1].v),cpx,toY(d.v),toX(i),toY(d.v)); } });
+  ctx.strokeStyle = '#4cc9f0'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke();
+}
+
+// =====================================================================
+// JAPANESE SETS CATALOGUE
+// =====================================================================
+const JP_SETS = [
+  // Scarlet & Violet era
+  { id:'sv8a',    name:'Night Wanderer',          series:'Scarlet & Violet', releaseDate:'2024/06/07', total:95,  printedTotal:64, lang:'jp' },
+  { id:'sv7a',    name:'Paradise Dragona',        series:'Scarlet & Violet', releaseDate:'2024/07/19', total:95,  printedTotal:64, lang:'jp' },
+  { id:'sv6a',    name:'Mask of Change',          series:'Scarlet & Violet', releaseDate:'2024/04/26', total:95,  printedTotal:64, lang:'jp' },
+  { id:'sv5a',    name:'Cyber Judge',             series:'Scarlet & Violet', releaseDate:'2024/01/26', total:95,  printedTotal:64, lang:'jp' },
+  { id:'sv5b',    name:'Wild Force',              series:'Scarlet & Violet', releaseDate:'2024/01/26', total:95,  printedTotal:64, lang:'jp' },
+  { id:'sv4a',    name:'Future Flash',            series:'Scarlet & Violet', releaseDate:'2023/10/27', total:95,  printedTotal:64, lang:'jp' },
+  { id:'sv4b',    name:'Ancient Roar',            series:'Scarlet & Violet', releaseDate:'2023/10/27', total:95,  printedTotal:64, lang:'jp' },
+  { id:'sv3a',    name:'Raging Surf',             series:'Scarlet & Violet', releaseDate:'2023/09/22', total:95,  printedTotal:64, lang:'jp' },
+  { id:'sv2a',    name:'Clay Burst',              series:'Scarlet & Violet', releaseDate:'2023/04/28', total:95,  printedTotal:64, lang:'jp' },
+  { id:'sv2b',    name:'Snow Hazard',             series:'Scarlet & Violet', releaseDate:'2023/04/28', total:95,  printedTotal:64, lang:'jp' },
+  { id:'sv1a',    name:'Triplet Beat',            series:'Scarlet & Violet', releaseDate:'2023/03/10', total:95,  printedTotal:64, lang:'jp' },
+  { id:'sv1',     name:'Scarlet & Violet',        series:'Scarlet & Violet', releaseDate:'2023/01/20', total:165, printedTotal:78, lang:'jp' },
+  // Sword & Shield era
+  { id:'s12a',    name:'VSTAR Universe',          series:'Sword & Shield',   releaseDate:'2022/12/02', total:242, printedTotal:172,lang:'jp' },
+  { id:'s11',     name:'Lost Abyss',              series:'Sword & Shield',   releaseDate:'2022/07/15', total:160, printedTotal:100,lang:'jp' },
+  { id:'s10b',    name:'Pokemon GO',              series:'Sword & Shield',   releaseDate:'2022/06/17', total:86,  printedTotal:71, lang:'jp' },
+  { id:'s10a',    name:'Dark Phantasma',          series:'Sword & Shield',   releaseDate:'2022/05/13', total:95,  printedTotal:66, lang:'jp' },
+  { id:'s10',     name:'Time Gazer / Space Juggler',series:'Sword & Shield', releaseDate:'2022/03/25', total:202, printedTotal:136,lang:'jp' },
+  { id:'s9a',     name:'Battle Legion',           series:'Sword & Shield',   releaseDate:'2022/02/25', total:95,  printedTotal:67, lang:'jp' },
+  { id:'s9',      name:'Star Birth',              series:'Sword & Shield',   releaseDate:'2022/01/14', total:136, printedTotal:100,lang:'jp' },
+  { id:'s8b',     name:'VMAX Climax',             series:'Sword & Shield',   releaseDate:'2021/12/03', total:184, printedTotal:100,lang:'jp' },
+  { id:'s8',      name:'Fusion Arts',             series:'Sword & Shield',   releaseDate:'2021/09/24', total:100, printedTotal:100,lang:'jp' },
+  { id:'s7a',     name:'Skyscraping Perfection',  series:'Sword & Shield',   releaseDate:'2021/07/09', total:95,  printedTotal:66, lang:'jp' },
+  { id:'s7d',     name:'Blue Sky Stream',         series:'Sword & Shield',   releaseDate:'2021/07/09', total:95,  printedTotal:66, lang:'jp' },
+  { id:'s7r',     name:'Eevee Heroes',            series:'Sword & Shield',   releaseDate:'2021/05/28', total:95,  printedTotal:69, lang:'jp' },
+  { id:'s6a',     name:'Silver Lance',            series:'Sword & Shield',   releaseDate:'2021/04/23', total:95,  printedTotal:69, lang:'jp' },
+  { id:'s6h',     name:'Jet-Black Spirit',        series:'Sword & Shield',   releaseDate:'2021/04/23', total:95,  printedTotal:69, lang:'jp' },
+  { id:'s5a',     name:'Matchless Fighters',      series:'Sword & Shield',   releaseDate:'2021/03/19', total:95,  printedTotal:69, lang:'jp' },
+  { id:'s5i',     name:'Single Strike Master',    series:'Sword & Shield',   releaseDate:'2021/01/22', total:95,  printedTotal:69, lang:'jp' },
+  { id:'s5r',     name:'Rapid Strike Master',     series:'Sword & Shield',   releaseDate:'2021/01/22', total:95,  printedTotal:69, lang:'jp' },
+  { id:'s4a',     name:'Shiny Star V',            series:'Sword & Shield',   releaseDate:'2020/11/20', total:190, printedTotal:100,lang:'jp' },
+  // Sun & Moon era (select fan-favorites)
+  { id:'sm12a',   name:'Tag All Stars',           series:'Sun & Moon',       releaseDate:'2019/10/04', total:173, printedTotal:100,lang:'jp' },
+  { id:'sm11a',   name:'Dream League',            series:'Sun & Moon',       releaseDate:'2019/08/02', total:95,  printedTotal:49, lang:'jp' },
+  { id:'sm10a',   name:'GG End',                  series:'Sun & Moon',       releaseDate:'2019/04/05', total:95,  printedTotal:54, lang:'jp' },
+  { id:'sm9a',    name:'Night Unison',            series:'Sun & Moon',       releaseDate:'2019/01/11', total:95,  printedTotal:55, lang:'jp' },
+  { id:'sm8b',    name:'Super-Burst Impact',      series:'Sun & Moon',       releaseDate:'2018/09/07', total:95,  printedTotal:55, lang:'jp' },
+];
+
+let catLang = 'en'; // 'en' or 'jp'
+
+function setCatLang(lang, btn) {
+  catLang = lang;
+  document.querySelectorAll('.cat-lang-btn').forEach(b => b.classList.toggle('active', b === btn));
+  catAllSets = lang === 'en' ? ALL_SETS : JP_SETS;
+  catSearchQuery = '';
+  catActiveEra = 'all';
+  document.getElementById('cat-search').value = '';
+  buildEraFilters();
+  renderSetGrid();
+}
+</script>
+</body>
+</html>
