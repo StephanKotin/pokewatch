@@ -1,4 +1,3 @@
-const TCG_API = 'https://api.pokemontcg.io/v2';
 export const TCG_CDN = 'https://images.pokemontcg.io';
 
 export async function apiGet(path) {
@@ -58,23 +57,36 @@ export function extractGradePrice(pokeTraceCard, gradeKey, grades) {
   return null;
 }
 
-export async function fetchTCGCards(setId, apiKey) {
-  const headers = apiKey ? { 'X-Api-Key': apiKey } : {};
-  let page = 1;
-  let allCards = [];
-  while (true) {
-    const res = await fetch(
-      `${TCG_API}/cards?q=set.id:${setId}&orderBy=number&pageSize=250&page=${page}`,
-      { headers }
-    );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const cards = data.data || [];
-    allCards = allCards.concat(cards);
-    if (allCards.length >= (data.totalCount || 0) || cards.length === 0) break;
-    page++;
+// Static card database (bundled at build time)
+let _cardDB = null;
+async function getCardDB() {
+  if (_cardDB) return _cardDB;
+  const mod = await import('../data/cards.json');
+  _cardDB = mod.default || mod;
+  return _cardDB;
+}
+
+// CDN image paths differ from app set IDs for some sets
+const CDN_PATH_MAP = {
+  fossil: 'base3',
+  jungle: 'base2',
+};
+
+export async function fetchTCGCards(setId) {
+  const db = await getCardDB();
+  const cards = db[setId];
+  if (cards && cards.length > 0) {
+    const cdnPath = CDN_PATH_MAP[setId] || setId;
+    return cards.map(c => ({
+      id: c.id,
+      name: c.name,
+      number: c.number,
+      rarity: c.rarity || '',
+      images: { small: `${TCG_CDN}/${cdnPath}/${c.number}.png` },
+    }));
   }
-  return allCards;
+  // Fallback for sets not in the static DB
+  return null;
 }
 
 export async function searchListingsAPI(card) {

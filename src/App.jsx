@@ -212,7 +212,6 @@ export default function App() {
         )}
         {activeTab === 'catalogue' && (
           <Catalogue
-            tcgApiKey={settings.tcgApiKey}
             watchlist={watchlist}
             addCard={handleAddCard}
             portfolio={portfolio}

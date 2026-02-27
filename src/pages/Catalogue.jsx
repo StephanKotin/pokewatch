@@ -12,7 +12,7 @@ const RARITY_FILTERS = [
   { key: 'secret', label: 'Secret' },
 ];
 
-export default function Catalogue({ tcgApiKey, watchlist, addCard, portfolio, addItem, toast }) {
+export default function Catalogue({ watchlist, addCard, portfolio, addItem, toast }) {
   const [lang, setLang] = useState('en');
   const [search, setSearch] = useState('');
   const [eraFilter, setEraFilter] = useState('all');
@@ -76,10 +76,21 @@ export default function Catalogue({ tcgApiKey, watchlist, addCard, portfolio, ad
       setRarityFilter('all');
       setModalLoading(true);
       try {
-        const cards = await fetchTCGCards(set.id, tcgApiKey);
-        setModalCards(cards);
+        const cards = await fetchTCGCards(set.id);
+        if (cards) {
+          setModalCards(cards);
+        } else {
+          // fallback for sets not in static DB
+          const fallback = Array.from({ length: set.total || set.printedTotal }, (_, i) => ({
+            id: `${set.id}-${i + 1}`,
+            name: `Card #${i + 1}`,
+            number: String(i + 1),
+            rarity: '',
+            images: { small: `${TCG_CDN}/${set.id}/${i + 1}.png` },
+          }));
+          setModalCards(fallback);
+        }
       } catch {
-        // fallback: generate placeholder cards from CDN
         const fallback = Array.from({ length: set.total || set.printedTotal }, (_, i) => ({
           id: `${set.id}-${i + 1}`,
           name: `Card #${i + 1}`,
@@ -92,7 +103,7 @@ export default function Catalogue({ tcgApiKey, watchlist, addCard, portfolio, ad
         setModalLoading(false);
       }
     },
-    [tcgApiKey]
+    []
   );
 
   /* ---- filtered modal cards ---- */
