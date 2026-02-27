@@ -1,38 +1,34 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiGet, apiPost, apiDelete } from '../api/poketrace';
 
-export function usePortfolio(demoMode) {
+export function usePortfolio() {
   const [portfolio, setPortfolio] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!demoMode) {
-        try {
-          const data = await apiGet('/api/portfolio');
-          if (!cancelled) {
-            setPortfolio(
-              data.map((row) => ({
-                id: row.id,
-                name: row.name,
-                set: row.set_name || '',
-                condition: row.condition || '',
-                purchasePrice: row.purchase_price || null,
-                purchaseDate: row.purchase_date || '',
-                notes: row.notes || '',
-              }))
-            );
-          }
-        } catch (e) {
-          console.warn('Failed to load portfolio:', e.message);
+      try {
+        const data = await apiGet('/api/portfolio');
+        if (!cancelled) {
+          setPortfolio(
+            data.map((row) => ({
+              id: row.id,
+              name: row.name,
+              set: row.set_name || '',
+              condition: row.condition || '',
+              purchasePrice: row.purchase_price || null,
+              purchaseDate: row.purchase_date || '',
+              notes: row.notes || '',
+            }))
+          );
         }
-      } else {
-        if (!cancelled) setPortfolio([]);
+      } catch (e) {
+        console.warn('Failed to load portfolio:', e.message);
       }
     }
     load();
     return () => { cancelled = true; };
-  }, [demoMode]);
+  }, []);
 
   const addItem = useCallback((item) => {
     setPortfolio((prev) => {

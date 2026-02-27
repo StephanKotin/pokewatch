@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiGet, apiPost, apiDelete } from '../api/poketrace';
 
-export function useWatchlist(demoMode) {
+export function useWatchlist() {
   const [watchlist, setWatchlist] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -9,31 +9,27 @@ export function useWatchlist(demoMode) {
     let cancelled = false;
     async function load() {
       setLoading(true);
-      if (!demoMode) {
-        try {
-          const wlData = await apiGet('/api/watchlist');
-          if (!cancelled) {
-            setWatchlist(
-              wlData.map((row) => ({
-                id: row.id,
-                name: row.name,
-                set: row.set_name || '',
-                condition: row.condition || '',
-                maxPrice: row.max_price || null,
-                addedAt: row.created_at
-                  ? new Date(row.created_at * 1000).toISOString()
-                  : new Date().toISOString(),
-                lastChecked: null,
-                newListingsCount: 0,
-                seenIds: [],
-              }))
-            );
-          }
-        } catch (e) {
-          console.warn('Failed to load watchlist:', e.message);
+      try {
+        const wlData = await apiGet('/api/watchlist');
+        if (!cancelled) {
+          setWatchlist(
+            wlData.map((row) => ({
+              id: row.id,
+              name: row.name,
+              set: row.set_name || '',
+              condition: row.condition || '',
+              maxPrice: row.max_price || null,
+              addedAt: row.created_at
+                ? new Date(row.created_at * 1000).toISOString()
+                : new Date().toISOString(),
+              lastChecked: null,
+              newListingsCount: 0,
+              seenIds: [],
+            }))
+          );
         }
-      } else {
-        if (!cancelled) setWatchlist([]);
+      } catch (e) {
+        console.warn('Failed to load watchlist:', e.message);
       }
       if (!cancelled) setLoading(false);
     }
@@ -41,7 +37,7 @@ export function useWatchlist(demoMode) {
     return () => {
       cancelled = true;
     };
-  }, [demoMode]);
+  }, []);
 
   const addCard = useCallback(
     (card) => {

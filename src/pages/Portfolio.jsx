@@ -38,7 +38,7 @@ function buildChartData(portfolio) {
   return points;
 }
 
-export default function Portfolio({ portfolio, addItem, removeItem, demoMode, toast }) {
+export default function Portfolio({ portfolio, addItem, removeItem, toast }) {
   const [editItem, setEditItem] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
@@ -180,7 +180,7 @@ export default function Portfolio({ portfolio, addItem, removeItem, demoMode, to
       {enriched.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">&#128188;</div>
-          <p>{demoMode ? 'Add cards to start tracking your portfolio.' : 'No cards in your portfolio yet.'}</p>
+          <p>No cards in your portfolio yet.</p>
         </div>
       ) : (
         <div className="port-cards-grid">

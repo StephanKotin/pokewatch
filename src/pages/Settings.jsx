@@ -4,7 +4,6 @@ import './Settings.css';
 
 export default function Settings({ settings, updateSettings, onClearData, onExportData, toast }) {
   const [apiKey, setApiKey] = useState(settings.tcgApiKey || '');
-  const [demoMode, setDemoMode] = useState(settings.demoMode || false);
   const [scanInterval, setScanInterval] = useState(settings.scanInterval || 0);
   const [soundAlerts, setSoundAlerts] = useState(settings.soundAlerts || false);
   const [browserNotifs, setBrowserNotifs] = useState(settings.browserNotifications || false);
@@ -13,10 +12,7 @@ export default function Settings({ settings, updateSettings, onClearData, onExpo
   const [freeShipping, setFreeShipping] = useState(settings.freeShipping || false);
 
   function handleSaveSettings() {
-    updateSettings({
-      tcgApiKey: apiKey,
-      demoMode,
-    });
+    updateSettings({ tcgApiKey: apiKey });
     if (toast) toast('Settings saved');
   }
 
@@ -75,14 +71,6 @@ export default function Settings({ settings, updateSettings, onClearData, onExpo
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
             />
-          </div>
-
-          <div className="setting-row">
-            <div>
-              <div className="setting-label">Demo Mode</div>
-              <div className="setting-desc">Use sample data instead of live API</div>
-            </div>
-            <Toggle checked={demoMode} onChange={setDemoMode} />
           </div>
 
           <button className="btn btn-primary" onClick={handleSaveSettings}>

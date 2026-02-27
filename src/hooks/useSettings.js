@@ -1,44 +1,33 @@
-import { useState, useCallback } from 'react';
-
-const STORAGE_KEY = 'pokewatch-settings';
-
-function loadSettings() {
-  try {
-    const s = localStorage.getItem(STORAGE_KEY);
-    if (s) return JSON.parse(s);
-  } catch (e) {}
-  return {};
-}
+import { useState, useEffect, useCallback } from 'react';
+import { apiGet, apiPut } from '../api/poketrace';
 
 const defaults = {
-  demoMode: true,
-  tcgApiKey: '',
   alertWebhookUrl: '',
   alertEmail: '',
   lastScan: null,
+  scanInterval: 0,
+  soundAlerts: false,
+  browserNotifications: false,
+  includeAuctions: true,
+  usOnly: false,
+  freeShipping: false,
 };
 
 export function useSettings() {
-  const [settings, setSettingsState] = useState(() => {
-    const stored = loadSettings();
-    return { ...defaults, ...stored };
-  });
+  const [settings, setSettingsState] = useState(defaults);
+
+  useEffect(() => {
+    apiGet('/api/settings')
+      .then((data) => setSettingsState((prev) => ({ ...prev, ...data })))
+      .catch((e) => console.warn('Failed to load settings:', e.message));
+  }, []);
 
   const updateSettings = useCallback((updates) => {
     setSettingsState((prev) => {
       const next = { ...prev, ...updates };
-      try {
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            demoMode: next.demoMode,
-            tcgApiKey: next.tcgApiKey,
-            alertWebhookUrl: next.alertWebhookUrl,
-            alertEmail: next.alertEmail,
-            lastScan: next.lastScan,
-          })
-        );
-      } catch (e) {}
+      apiPut('/api/settings', updates).catch((e) =>
+        console.warn('Failed to save settings:', e.message)
+      );
       return next;
     });
   }, []);

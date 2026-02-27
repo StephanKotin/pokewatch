@@ -1,8 +1,29 @@
-import { useState, useCallback } from 'react';
-import { fmt } from '../utils/format';
+import { useState, useEffect, useCallback } from 'react';
+import { apiGet, apiPost } from '../api/poketrace';
 
 export function useAlerts() {
   const [firedAlerts, setFiredAlerts] = useState({});
+
+  useEffect(() => {
+    apiGet('/api/alerts')
+      .then((rows) => {
+        const alerts = {};
+        for (const row of rows) {
+          const key = `alert-${row.card_id}-${row.id}`;
+          alerts[key] = {
+            cardName: row.card_name,
+            price: row.price,
+            firedAt: row.fired_at
+              ? new Date(row.fired_at * 1000).toISOString()
+              : new Date().toISOString(),
+            url: row.url || '#',
+            title: row.listing_title || '',
+          };
+        }
+        setFiredAlerts(alerts);
+      })
+      .catch((e) => console.warn('Failed to load alerts:', e.message));
+  }, []);
 
   const fireAlert = useCallback((card, listing, { webhookUrl, email, toastEnabled, webhookEnabled } = {}) => {
     const key = `alert-${card.id}-${listing.id}`;
@@ -20,6 +41,16 @@ export function useAlerts() {
         },
       };
     });
+
+    // Persist to server
+    apiPost('/api/alerts', {
+      card_id: card.id,
+      card_name: card.name,
+      listing_title: listing.title,
+      price: listing.price,
+      threshold: card.maxPrice,
+      url: listing.url,
+    }).catch(() => {});
 
     // Webhook
     if (webhookEnabled && webhookUrl) {

@@ -1,24 +1,48 @@
 export const TCG_CDN = 'https://images.pokemontcg.io';
 
+const TOKEN_KEY = 'pokewatch-token';
+
+function authHeaders() {
+  const token = localStorage.getItem(TOKEN_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function handle401(r) {
+  if (r.status === 401) {
+    localStorage.removeItem(TOKEN_KEY);
+    window.location.reload();
+  }
+}
+
 export async function apiGet(path) {
-  const r = await fetch(path);
-  if (!r.ok) throw new Error(await r.text());
+  const r = await fetch(path, { headers: authHeaders() });
+  if (!r.ok) { handle401(r); throw new Error(await r.text()); }
   return r.json();
 }
 
 export async function apiPost(path, body) {
   const r = await fetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) { handle401(r); throw new Error(await r.text()); }
+  return r.json();
+}
+
+export async function apiPut(path, body) {
+  const r = await fetch(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) { handle401(r); throw new Error(await r.text()); }
   return r.json();
 }
 
 export async function apiDelete(path) {
-  const r = await fetch(path, { method: 'DELETE' });
-  if (!r.ok) throw new Error(await r.text());
+  const r = await fetch(path, { method: 'DELETE', headers: authHeaders() });
+  if (!r.ok) { handle401(r); throw new Error(await r.text()); }
   return r.json();
 }
 
