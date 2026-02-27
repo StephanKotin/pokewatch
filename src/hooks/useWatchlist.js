@@ -19,6 +19,9 @@ export function useWatchlist() {
               set: row.set_name || '',
               condition: row.condition || '',
               maxPrice: row.max_price || null,
+              image: row.image || null,
+              number: row.number || null,
+              setId: row.set_id || null,
               addedAt: row.created_at
                 ? new Date(row.created_at * 1000).toISOString()
                 : new Date().toISOString(),
@@ -56,6 +59,9 @@ export function useWatchlist() {
         set_name: entry.set || null,
         condition: entry.condition || null,
         max_price: entry.maxPrice || null,
+        image: entry.image || null,
+        number: entry.number || null,
+        set_id: entry.setId || null,
       }).catch((e) => console.warn('Failed to sync card:', e.message));
     },
     []

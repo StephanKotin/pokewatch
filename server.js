@@ -23,6 +23,9 @@ db.exec(`
     set_name TEXT,
     condition TEXT,
     max_price REAL,
+    image TEXT,
+    number TEXT,
+    set_id TEXT,
     created_at INTEGER DEFAULT (strftime('%s','now'))
   );
   CREATE TABLE IF NOT EXISTS price_snapshots (
@@ -77,6 +80,9 @@ db.exec(`
 
 // Add user_id columns to existing tables (idempotent)
 try { db.exec("ALTER TABLE watchlist ADD COLUMN user_id TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE watchlist ADD COLUMN image TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE watchlist ADD COLUMN number TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE watchlist ADD COLUMN set_id TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE portfolio ADD COLUMN user_id TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE alerts ADD COLUMN user_id TEXT"); } catch(e) {}
 
@@ -248,8 +254,8 @@ app.get('/api/watchlist', authenticate, (req, res) => {
 });
 
 app.post('/api/watchlist', authenticate, (req, res) => {
-  const { id, name, set_name, condition, max_price } = req.body;
-  db.prepare('INSERT OR REPLACE INTO watchlist (id, name, set_name, condition, max_price, user_id) VALUES (?, ?, ?, ?, ?, ?)').run(id, name, set_name || null, condition || null, max_price || null, req.userId);
+  const { id, name, set_name, condition, max_price, image, number, set_id } = req.body;
+  db.prepare('INSERT OR REPLACE INTO watchlist (id, name, set_name, condition, max_price, image, number, set_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, name, set_name || null, condition || null, max_price || null, image || null, number || null, set_id || null, req.userId);
   res.json({ ok: true });
 });
 
