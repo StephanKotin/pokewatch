@@ -1,0 +1,26 @@
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  padding: 10px 20px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab.active {
+  color: var(--yellow);
+  border-bottom-color: var(--yellow);
+}

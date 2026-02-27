@@ -1,0 +1,60 @@
+.alerts-page {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.alert-config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.alerts-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.alert-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.alert-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.alert-dot.watching {
+  background: var(--warning);
+}
+
+.alert-dot.sent {
+  background: var(--danger);
+}
+
+.alert-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.alert-actions {
+  flex-shrink: 0;
+}
+
+.alert-status-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}

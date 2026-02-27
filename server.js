@@ -55,7 +55,11 @@ db.exec(`
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve Vite build output in production, fall back to public/ for legacy
+const fs = require('fs');
+const distPath = path.join(__dirname, 'dist');
+const publicPath = path.join(__dirname, 'public');
+app.use(express.static(fs.existsSync(distPath) ? distPath : publicPath));
 
 app.get('/api/prices', async (req, res) => {
   const { name, set } = req.query;

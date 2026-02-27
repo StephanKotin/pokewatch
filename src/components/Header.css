@@ -1,0 +1,65 @@
+.app-header {
+  z-index: 10;
+  border-bottom: 1px solid var(--border);
+  background: rgba(13, 13, 15, 0.92);
+  backdrop-filter: blur(12px);
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  position: sticky;
+  top: 0;
+}
+.logo {
+  font-family: 'Bangers', cursive;
+  font-size: 28px;
+  letter-spacing: 2px;
+  color: var(--yellow);
+  text-shadow: 2px 2px 0 rgba(249, 225, 0, 0.2);
+}
+.logo span {
+  color: var(--text);
+}
+.header-stats {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
+.stat-pill {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.stat-pill b {
+  color: var(--text);
+}
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse 2s infinite;
+  display: inline-block;
+  margin-right: 6px;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+@media (max-width: 960px) {
+  .app-header {
+    padding: 0 16px;
+  }
+}

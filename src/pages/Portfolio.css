@@ -1,0 +1,199 @@
+/* Portfolio page-specific styles */
+.portfolio-page {
+  padding-bottom: 2rem;
+}
+
+.portfolio-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.port-stat-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: var(--card-bg, #fff);
+}
+
+.port-stat-card.pstat-up {
+  border-color: #57cc99;
+}
+
+.port-stat-card.pstat-down {
+  border-color: #f87171;
+}
+
+.port-stat-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}
+
+.port-stat-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.port-stat-sub {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.pstat-up .port-stat-value,
+.pstat-up .port-stat-sub {
+  color: #57cc99;
+}
+
+.pstat-down .port-stat-value,
+.pstat-down .port-stat-sub {
+  color: #f87171;
+}
+
+.port-chart-wrap {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+  background: var(--card-bg, #fff);
+}
+
+.port-chart-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  opacity: 0.6;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.port-section-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.port-section-hdr h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.port-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
+}
+
+.port-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: var(--card-bg, #fff);
+}
+
+.port-card-header {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+
+.port-tcg-img {
+  width: 48px;
+  height: 67px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.port-card-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.port-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  opacity: 0.6;
+  margin-top: 0.15rem;
+}
+
+.port-card-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.port-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.port-cell-lbl {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+
+.port-cell-val {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.port-cell-val.up {
+  color: #57cc99;
+}
+
+.port-cell-val.down {
+  color: #f87171;
+}
+
+.port-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.port-card-footer .btn {
+  margin-left: 0.3rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.72rem;
+}
+
+.pnl-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+}
+
+.pnl-badge.up {
+  background: rgba(87, 204, 153, 0.12);
+  color: #57cc99;
+}
+
+.pnl-badge.down {
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+}
+
+.pnl-badge.flat {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+}
+
+.tag {
+  background: var(--border);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
