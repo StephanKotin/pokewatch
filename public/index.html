@@ -534,7 +534,7 @@
         <button class="btn btn-primary" onclick="addCard()">Add Card</button>
       </div>
     </div>
-    <div class="watchlist-grid" id="watchlist-grid"></div>
+    <div class="watchlist-grid" id="watchlist-cards"></div>
     <div class="empty-state" id="watchlist-empty" style="display:none;">
       <div class="empty-icon">🃏</div>
       <h3>No cards on your watchlist</h3>
@@ -679,11 +679,11 @@
 // GRADE CONFIG
 // =====================================================================
 const GRADES = [
-  { key: 'nm',   label: 'Near Mint',        color: '#57cc99', ptField: 'NEAR_MINT',        defaultOn: true  },
-  { key: 'lp',   label: 'Lightly Played',   color: '#ff9f1c', ptField: 'LIGHTLY_PLAYED',   defaultOn: false },
-  { key: 'mp',   label: 'Mod. Played',      color: '#a78bfa', ptField: 'MODERATELY_PLAYED',defaultOn: false },
-  { key: 'hp',   label: 'Heavily Played',   color: '#f87171', ptField: 'HEAVILY_PLAYED',   defaultOn: false },
-  { key: 'dmg',  label: 'Damaged',          color: '#94a3b8', ptField: 'DAMAGED',          defaultOn: false },
+  { key: 'nm',   label: 'Near Mint',        color: '#57cc99', ptField: 'NEAR_MINT',        defaultOn: true,  multiplier: 1.0  },
+  { key: 'lp',   label: 'Lightly Played',   color: '#ff9f1c', ptField: 'LIGHTLY_PLAYED',   defaultOn: false, multiplier: 0.75 },
+  { key: 'mp',   label: 'Mod. Played',      color: '#a78bfa', ptField: 'MODERATELY_PLAYED',defaultOn: false, multiplier: 0.55 },
+  { key: 'hp',   label: 'Heavily Played',   color: '#f87171', ptField: 'HEAVILY_PLAYED',   defaultOn: false, multiplier: 0.35 },
+  { key: 'dmg',  label: 'Damaged',          color: '#94a3b8', ptField: 'DAMAGED',          defaultOn: false, multiplier: 0.2  },
 ];
 
 // Per-card grade visibility — persisted in chartState
@@ -1588,6 +1588,16 @@ async function init() {
       ];
     }
   }
+
+  // Populate chartState for all watchlist cards so charts render
+  state.watchlist.forEach(card => {
+    if (!chartState[card.id]) {
+      const gradeData = generateAllGrades(card);
+      const activeGrades = {};
+      GRADES.forEach(g => { activeGrades[g.key] = g.defaultOn; });
+      chartState[card.id] = { gradeData, activeGrades, range: 7, hover: null, source: 'mock' };
+    }
+  });
 
   renderWatchlist(); renderListings(); updateStats();
 }
