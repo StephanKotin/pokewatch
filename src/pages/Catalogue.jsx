@@ -12,7 +12,7 @@ const RARITY_FILTERS = [
   { key: 'secret', label: 'Secret' },
 ];
 
-export default function Catalogue({ tcgApiKey, watchlist, addCard, toast }) {
+export default function Catalogue({ tcgApiKey, watchlist, addCard, portfolio, addItem, toast }) {
   const [lang, setLang] = useState('en');
   const [search, setSearch] = useState('');
   const [eraFilter, setEraFilter] = useState('all');
@@ -22,8 +22,12 @@ export default function Catalogue({ tcgApiKey, watchlist, addCard, toast }) {
   const [modalSearch, setModalSearch] = useState('');
   const [rarityFilter, setRarityFilter] = useState('all');
   const [addTarget, setAddTarget] = useState(null);
+  const [addMode, setAddMode] = useState('watchlist');
   const [addCondition, setAddCondition] = useState('Near Mint');
   const [addMaxPrice, setAddMaxPrice] = useState('');
+  const [addPurchasePrice, setAddPurchasePrice] = useState('');
+  const [addPurchaseDate, setAddPurchaseDate] = useState('');
+  const [addNotes, setAddNotes] = useState('');
 
   const sets = lang === 'jp' ? JP_SETS : ALL_SETS;
 
@@ -76,7 +80,7 @@ export default function Catalogue({ tcgApiKey, watchlist, addCard, toast }) {
         setModalCards(cards);
       } catch {
         // fallback: generate placeholder cards from CDN
-        const fallback = Array.from({ length: set.printedTotal || set.total }, (_, i) => ({
+        const fallback = Array.from({ length: set.total || set.printedTotal }, (_, i) => ({
           id: `${set.id}-${i + 1}`,
           name: `Card #${i + 1}`,
           number: String(i + 1),
@@ -120,24 +124,60 @@ export default function Catalogue({ tcgApiKey, watchlist, addCard, toast }) {
     [watchlist]
   );
 
-  /* ---- submit watch ---- */
-  const handleAddWatch = () => {
-    if (!addTarget) return;
-    addCard({
-      cardId: addTarget.id,
-      name: addTarget.name,
-      set: modalSet?.name || '',
-      setId: modalSet?.id || '',
-      number: addTarget.number,
-      rarity: addTarget.rarity || '',
-      image: addTarget.images?.small || `${TCG_CDN}/${modalSet?.id}/${addTarget.number}.png`,
-      condition: addCondition,
-      maxPrice: addMaxPrice ? parseFloat(addMaxPrice) : null,
-    });
-    toast && toast(`${addTarget.name} added to watchlist`);
-    setAddTarget(null);
+  /* ---- portfolio lookup ---- */
+  const isInPortfolio = useCallback(
+    (cardId) => (portfolio || []).some((p) => p.cardId === cardId || p.id === cardId),
+    [portfolio]
+  );
+
+  /* ---- open add modal ---- */
+  const openAddModal = (card, mode) => {
+    setAddTarget(card);
+    setAddMode(mode);
     setAddCondition('Near Mint');
     setAddMaxPrice('');
+    setAddPurchasePrice('');
+    setAddPurchaseDate('');
+    setAddNotes('');
+  };
+
+  /* ---- submit add ---- */
+  const handleAddSubmit = () => {
+    if (!addTarget) return;
+
+    if (addMode === 'watchlist') {
+      addCard({
+        id: addTarget.id,
+        cardId: addTarget.id,
+        name: addTarget.name,
+        set: modalSet?.name || '',
+        setId: modalSet?.id || '',
+        number: addTarget.number,
+        rarity: addTarget.rarity || '',
+        image: addTarget.images?.small || `${TCG_CDN}/${modalSet?.id}/${addTarget.number}.png`,
+        condition: addCondition,
+        maxPrice: addMaxPrice ? parseFloat(addMaxPrice) : null,
+      });
+      toast && toast(`${addTarget.name} added to watchlist`);
+    } else {
+      addItem({
+        id: addTarget.id,
+        cardId: addTarget.id,
+        name: addTarget.name,
+        set: modalSet?.name || '',
+        setId: modalSet?.id || '',
+        number: addTarget.number,
+        rarity: addTarget.rarity || '',
+        image: addTarget.images?.small || `${TCG_CDN}/${modalSet?.id}/${addTarget.number}.png`,
+        condition: addCondition,
+        purchasePrice: addPurchasePrice ? parseFloat(addPurchasePrice) : null,
+        purchaseDate: addPurchaseDate || null,
+        notes: addNotes,
+      });
+      toast && toast(`${addTarget.name} added to portfolio`);
+    }
+
+    setAddTarget(null);
   };
 
   return (
@@ -301,6 +341,7 @@ export default function Catalogue({ tcgApiKey, watchlist, addCard, toast }) {
                   {filteredCards.map((card) => {
                     const rc = rarityClass(card.rarity);
                     const watched = isOnWatchlist(card.id);
+                    const owned = isInPortfolio(card.id);
                     return (
                       <div
                         key={card.id}
@@ -323,16 +364,28 @@ export default function Catalogue({ tcgApiKey, watchlist, addCard, toast }) {
                             )}
                           </span>
                         </div>
-                        <button
-                          className="btn-add-watch"
-                          disabled={watched}
-                          onClick={() => {
-                            if (watched) return;
-                            setAddTarget(card);
-                          }}
-                        >
-                          {watched ? 'Watching' : 'Watch'}
-                        </button>
+                        <div className="tcg-card-actions">
+                          <button
+                            className="btn-add-watch"
+                            disabled={watched}
+                            onClick={() => {
+                              if (watched) return;
+                              openAddModal(card, 'watchlist');
+                            }}
+                          >
+                            {watched ? 'Watching' : 'Watch'}
+                          </button>
+                          <button
+                            className="btn-add-portfolio"
+                            disabled={owned}
+                            onClick={() => {
+                              if (owned) return;
+                              openAddModal(card, 'portfolio');
+                            }}
+                          >
+                            {owned ? 'Owned' : 'Collect'}
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -343,11 +396,29 @@ export default function Catalogue({ tcgApiKey, watchlist, addCard, toast }) {
         </div>
       )}
 
-      {/* ---- add to watchlist mini-modal ---- */}
+      {/* ---- add mini-modal ---- */}
       {addTarget && (
         <div className="add-modal-overlay" onClick={() => setAddTarget(null)}>
           <div className="add-modal" onClick={(e) => e.stopPropagation()}>
-            <h4>Add "{addTarget.name}" to Watchlist</h4>
+            <h4>
+              Add "{addTarget.name}" to {addMode === 'watchlist' ? 'Watchlist' : 'Portfolio'}
+            </h4>
+
+            <div className="add-mode-tabs">
+              <button
+                className={`add-mode-btn${addMode === 'watchlist' ? ' active' : ''}`}
+                onClick={() => setAddMode('watchlist')}
+              >
+                Watchlist
+              </button>
+              <button
+                className={`add-mode-btn${addMode === 'portfolio' ? ' active' : ''}`}
+                onClick={() => setAddMode('portfolio')}
+              >
+                Portfolio
+              </button>
+            </div>
+
             <div className="form-group">
               <label>Condition</label>
               <select value={addCondition} onChange={(e) => setAddCondition(e.target.value)}>
@@ -358,21 +429,56 @@ export default function Catalogue({ tcgApiKey, watchlist, addCard, toast }) {
                 <option>Damaged</option>
               </select>
             </div>
-            <div className="form-group">
-              <label>Max Price ($)</label>
-              <input
-                type="number"
-                placeholder="Optional"
-                value={addMaxPrice}
-                onChange={(e) => setAddMaxPrice(e.target.value)}
-              />
-            </div>
+
+            {addMode === 'watchlist' && (
+              <div className="form-group">
+                <label>Max Price ($)</label>
+                <input
+                  type="number"
+                  placeholder="Optional"
+                  value={addMaxPrice}
+                  onChange={(e) => setAddMaxPrice(e.target.value)}
+                />
+              </div>
+            )}
+
+            {addMode === 'portfolio' && (
+              <>
+                <div className="form-group">
+                  <label>Purchase Price ($)</label>
+                  <input
+                    type="number"
+                    placeholder="Optional"
+                    value={addPurchasePrice}
+                    onChange={(e) => setAddPurchasePrice(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Purchase Date</label>
+                  <input
+                    type="date"
+                    value={addPurchaseDate}
+                    onChange={(e) => setAddPurchaseDate(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Notes</label>
+                  <input
+                    type="text"
+                    placeholder="Optional"
+                    value={addNotes}
+                    onChange={(e) => setAddNotes(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
             <div className="add-modal-actions">
               <button className="btn btn-secondary" onClick={() => setAddTarget(null)}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleAddWatch}>
-                Add to Watchlist
+              <button className="btn btn-primary" onClick={handleAddSubmit}>
+                Add to {addMode === 'watchlist' ? 'Watchlist' : 'Portfolio'}
               </button>
             </div>
           </div>

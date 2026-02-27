@@ -33,43 +33,7 @@ export function useWatchlist(demoMode) {
           console.warn('Failed to load watchlist:', e.message);
         }
       } else {
-        if (!cancelled) {
-          setWatchlist([
-            {
-              id: 'demo1',
-              name: 'Charizard',
-              set: 'Base Set',
-              condition: 'Near Mint',
-              maxPrice: 500,
-              addedAt: new Date().toISOString(),
-              lastChecked: null,
-              newListingsCount: 0,
-              seenIds: [],
-            },
-            {
-              id: 'demo2',
-              name: 'Pikachu Illustrator',
-              set: '',
-              condition: '',
-              maxPrice: 500000,
-              addedAt: new Date().toISOString(),
-              lastChecked: null,
-              newListingsCount: 0,
-              seenIds: [],
-            },
-            {
-              id: 'demo3',
-              name: 'Umbreon VMAX',
-              set: 'Evolving Skies',
-              condition: 'Near Mint',
-              maxPrice: 200,
-              addedAt: new Date().toISOString(),
-              lastChecked: null,
-              newListingsCount: 2,
-              seenIds: [],
-            },
-          ]);
-        }
+        if (!cancelled) setWatchlist([]);
       }
       if (!cancelled) setLoading(false);
     }
@@ -81,13 +45,21 @@ export function useWatchlist(demoMode) {
 
   const addCard = useCallback(
     (card) => {
-      setWatchlist((prev) => [...prev, card]);
+      const entry = {
+        ...card,
+        id: card.id || card.cardId || Date.now().toString(),
+        addedAt: card.addedAt || new Date().toISOString(),
+        lastChecked: null,
+        newListingsCount: 0,
+        seenIds: [],
+      };
+      setWatchlist((prev) => [...prev, entry]);
       apiPost('/api/watchlist', {
-        id: card.id,
-        name: card.name,
-        set_name: card.set || null,
-        condition: card.condition || null,
-        max_price: card.maxPrice || null,
+        id: entry.id,
+        name: entry.name,
+        set_name: entry.set || null,
+        condition: entry.condition || null,
+        max_price: entry.maxPrice || null,
       }).catch((e) => console.warn('Failed to sync card:', e.message));
     },
     []

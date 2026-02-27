@@ -24,3 +24,10 @@
   color: var(--yellow);
   border-bottom-color: var(--yellow);
 }
+.beta-tag {
+  font-size: 9px;
+  color: var(--muted);
+  margin-left: 3px;
+  vertical-align: super;
+  letter-spacing: 0.3px;
+}

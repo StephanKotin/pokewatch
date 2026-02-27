@@ -246,3 +246,64 @@
   border-radius: 4px;
   font-weight: 700;
 }
+
+/* Card action buttons */
+.tcg-card-actions {
+  display: flex;
+  gap: 4px;
+  margin: 0.3rem 0.5rem 0.5rem;
+}
+
+.tcg-card-actions .btn-add-watch,
+.tcg-card-actions .btn-add-portfolio {
+  margin: 0;
+  flex: 1;
+}
+
+.btn-add-portfolio {
+  padding: 0.3rem;
+  border: 1px solid var(--green, #22c55e);
+  background: transparent;
+  color: var(--green, #22c55e);
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-add-portfolio:hover:not(:disabled) {
+  background: var(--green, #22c55e);
+  color: #fff;
+}
+
+.btn-add-portfolio:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Add modal mode tabs */
+.add-mode-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 0.75rem;
+}
+
+.add-mode-btn {
+  flex: 1;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.add-mode-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb, 59, 130, 246), 0.08);
+}

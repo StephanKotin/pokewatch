@@ -23,7 +23,7 @@ export default function App() {
   const { portfolio, addItem, removeItem } = usePortfolio(settings.demoMode);
   const { firedAlerts, fireAlert, clearAlert } = useAlerts();
 
-  const [activeTab, setActiveTab] = useState('watchlist');
+  const [activeTab, setActiveTab] = useState('catalogue');
   const [listings, setListings] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [showBanner, setShowBanner] = useState(true);
@@ -194,7 +194,6 @@ export default function App() {
         {activeTab === 'watchlist' && (
           <Watchlist
             watchlist={watchlist}
-            addCard={handleAddCard}
             removeCard={handleRemoveCard}
             updateCard={updateCard}
             scanCard={scanCard}
@@ -216,6 +215,8 @@ export default function App() {
             tcgApiKey={settings.tcgApiKey}
             watchlist={watchlist}
             addCard={handleAddCard}
+            portfolio={portfolio}
+            addItem={addItem}
             toast={toast}
           />
         )}

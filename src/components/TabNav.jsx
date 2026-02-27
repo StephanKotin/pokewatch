@@ -2,12 +2,12 @@ import React from 'react';
 import './TabNav.css';
 
 const TABS = [
-  { key: 'watchlist', label: 'Watchlist' },
-  { key: 'listings', label: 'Live Listings' },
   { key: 'catalogue', label: 'Catalogue' },
+  { key: 'watchlist', label: 'Watchlist' },
   { key: 'portfolio', label: 'Portfolio' },
-  { key: 'alerts', label: 'Alerts' },
-  { key: 'settings', label: 'Settings' },
+  { key: 'alerts', label: 'Alerts', beta: true },
+  { key: 'listings', label: 'Live Listings', beta: true },
+  { key: 'settings', label: 'Settings', beta: true },
 ];
 
 export default function TabNav({ activeTab, onTabChange }) {
@@ -20,6 +20,7 @@ export default function TabNav({ activeTab, onTabChange }) {
           onClick={() => onTabChange(tab.key)}
         >
           {tab.label}
+          {tab.beta && <sup className="beta-tag">beta</sup>}
         </button>
       ))}
     </div>

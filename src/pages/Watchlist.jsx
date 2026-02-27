@@ -5,24 +5,7 @@ import { fmtD, timeAgo } from '../utils/format';
 import PriceChart from '../components/PriceChart';
 import './Watchlist.css';
 
-const CONDITION_OPTIONS = [
-  'Any',
-  'Near Mint',
-  'Lightly Played',
-  'Mod. Played',
-  'Heavily Played',
-  'Damaged',
-  'CGC 10',
-  'CGC 9.5',
-  'Raw NM',
-  'Raw LP',
-];
-
-export default function Watchlist({ watchlist, addCard, removeCard, updateCard, demoMode, toast }) {
-  const [name, setName] = useState('');
-  const [set, setSet] = useState('');
-  const [condition, setCondition] = useState('Any');
-  const [maxPrice, setMaxPrice] = useState('');
+export default function Watchlist({ watchlist, removeCard, updateCard, scanCard, demoMode, toast }) {
   const [chartData, setChartData] = useState({});
 
   // Initialize chart data for watchlist cards
@@ -52,33 +35,11 @@ export default function Watchlist({ watchlist, addCard, removeCard, updateCard, 
     });
   }, [watchlist]);
 
-  function handleSubmit(e) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    const card = {
-      id: Date.now().toString(),
-      name: name.trim(),
-      set: set.trim(),
-      condition,
-      maxPrice: maxPrice ? parseFloat(maxPrice) : null,
-      addedAt: new Date().toISOString(),
-      lastChecked: null,
-      newListingsCount: 0,
-      seenIds: [],
-    };
-    addCard(card);
-    setName('');
-    setSet('');
-    setCondition('Any');
-    setMaxPrice('');
-  }
-
   function toggleGrade(cardId, gradeKey) {
     setChartData((prev) => {
       const cardState = prev[cardId];
       if (!cardState) return prev;
       const activeCount = Object.values(cardState.activeGrades).filter(Boolean).length;
-      // Prevent turning off the last active grade
       if (cardState.activeGrades[gradeKey] && activeCount <= 1) return prev;
       return {
         ...prev,
@@ -104,108 +65,13 @@ export default function Watchlist({ watchlist, addCard, removeCard, updateCard, 
     });
   }
 
-  function scanCard(card) {
-    if (!demoMode) return;
-
-    const seedNum =
-      (card.id + 'scan' + Date.now().toString().slice(0, -4))
-        .split('')
-        .reduce((acc, c, i) => acc + c.charCodeAt(0) * (i + 1), 0) * 1009;
-    const rand = mulberry32(seedNum);
-    const base = getRawBasePrice(card.name);
-    const count = Math.floor(rand() * 4) + 1;
-
-    const newListings = [];
-    for (let i = 0; i < count; i++) {
-      newListings.push({
-        id: `mock-${Date.now()}-${i}`,
-        title: `${card.name} ${card.set || ''}`.trim(),
-        price: Math.round(base * (0.7 + rand() * 0.6)),
-        condition: card.condition !== 'Any' ? card.condition : 'Near Mint',
-        source: 'Mock',
-        time: Date.now(),
-      });
-    }
-
-    updateCard({
-      ...card,
-      lastChecked: new Date().toISOString(),
-      newListingsCount: count,
-    });
-
-    if (toast) {
-      toast(`Found ${count} new listing${count !== 1 ? 's' : ''} for ${card.name}`);
-    }
-  }
-
-  function scanAll() {
-    watchlist.forEach((card) => scanCard(card));
-  }
-
   return (
     <div className="watchlist-page">
-      {/* Add Card Form */}
-      <div className="add-card-section">
-        <h3 className="section-title">Add Card to Watchlist</h3>
-        <form onSubmit={handleSubmit}>
-          <div className="form-row">
-            <div className="form-group">
-              <input
-                type="text"
-                placeholder="Card Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <input
-                type="text"
-                placeholder="Set / Edition"
-                value={set}
-                onChange={(e) => setSet(e.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <select value={condition} onChange={(e) => setCondition(e.target.value)}>
-                {CONDITION_OPTIONS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <input
-                type="number"
-                placeholder="Max Price ($)"
-                value={maxPrice}
-                onChange={(e) => setMaxPrice(e.target.value)}
-                min="0"
-                step="0.01"
-              />
-            </div>
-            <button type="submit" className="btn btn-primary">
-              Add Card
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Scan All Button */}
-      {watchlist.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-          <button className="btn btn-primary btn-sm" onClick={scanAll}>
-            Scan All
-          </button>
-        </div>
-      )}
-
       {/* Watchlist Grid */}
       {watchlist.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">&#128269;</div>
-          <p>No cards in your watchlist yet. Add one above to start tracking prices.</p>
+          <p>No cards in your watchlist yet. Add cards from the Catalogue to start tracking prices.</p>
         </div>
       ) : (
         <div className="watchlist-grid">
@@ -235,7 +101,7 @@ export default function Watchlist({ watchlist, addCard, removeCard, updateCard, 
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn btn-sm" onClick={() => scanCard(card)}>
+                    <button className="btn btn-sm" onClick={() => scanCard(card.id)}>
                       Scan
                     </button>
                     <button className="btn btn-sm btn-danger" onClick={() => removeCard(card.id)}>

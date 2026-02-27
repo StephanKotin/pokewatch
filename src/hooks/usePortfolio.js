@@ -27,13 +27,7 @@ export function usePortfolio(demoMode) {
           console.warn('Failed to load portfolio:', e.message);
         }
       } else {
-        if (!cancelled) {
-          setPortfolio([
-            { id: 'p1', name: 'Charizard', set: 'Base Set', condition: 'Near Mint', purchasePrice: 400, purchaseDate: '2023-06-15', notes: '' },
-            { id: 'p2', name: 'Umbreon VMAX', set: 'Evolving Skies', condition: 'Near Mint', purchasePrice: 180, purchaseDate: '2024-01-20', notes: 'Alt Art' },
-            { id: 'p3', name: 'Gengar', set: 'Fossil', condition: 'Near Mint', purchasePrice: 85, purchaseDate: '2024-03-02', notes: '' },
-          ]);
-        }
+        if (!cancelled) setPortfolio([]);
       }
     }
     load();

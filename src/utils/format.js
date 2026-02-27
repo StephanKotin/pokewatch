@@ -29,7 +29,12 @@ export function timeAgo(iso) {
 export function rarityClass(rarity) {
   if (!rarity) return '';
   const r = rarity.toLowerCase();
-  if (r.includes('secret') || r.includes('special illustration') || r.includes('hyper'))
+  if (
+    r.includes('secret') ||
+    r.includes('special illustration') ||
+    r.includes('hyper') ||
+    r.includes('ace spec')
+  )
     return 'secret';
   if (
     r.includes('ultra') ||
@@ -37,10 +42,20 @@ export function rarityClass(rarity) {
     r.includes('vmax') ||
     r.includes('full art') ||
     r.includes('rainbow') ||
-    r.includes('alternate')
+    r.includes('alternate') ||
+    r.includes('double rare') ||
+    r.includes('rare break') ||
+    r.includes('rare prime') ||
+    r.includes('legend') ||
+    r.includes('lvl') ||
+    r.includes('ex') ||
+    r.includes('gx') ||
+    r.includes('v-')
   )
     return 'ultra';
-  if (r.includes('holo') || r.includes('rare holo')) return 'holo';
-  if (r.includes('illustration') || r.includes('shiny')) return 'special';
+  if (r.includes('holo') || r.includes('rare holo') || r.includes('amazing') || r.includes('radiant'))
+    return 'holo';
+  if (r.includes('illustration') || r.includes('shiny'))
+    return 'special';
   return '';
 }
