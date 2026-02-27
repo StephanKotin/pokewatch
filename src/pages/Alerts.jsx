@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import Toggle from '../components/Toggle';
 import { fmt, fmtD, timeAgo } from '../utils/format';
-import { computeStats } from '../data/basePrices';
 import './Alerts.css';
 
 export default function Alerts({ watchlist, firedAlerts, clearAlert, settings, updateSettings, toast }) {
@@ -93,7 +92,6 @@ export default function Alerts({ watchlist, firedAlerts, clearAlert, settings, u
         ) : (
           <div className="alert-list">
             {alertCards.map(card => {
-              const stats = computeStats(card.id);
               const alertKey = Object.keys(firedAlerts || {}).find(k => k.includes(`-${card.id}-`));
               const hasFired = !!alertKey;
 
@@ -106,7 +104,7 @@ export default function Alerts({ watchlist, firedAlerts, clearAlert, settings, u
                       {card.condition || 'Any condition'}
                     </div>
                     <div className="alert-threshold">
-                      Avg: {stats?.avg ? fmt(stats.avg) : '—'} &middot; Threshold: {fmt(card.maxPrice)}
+                      Threshold: ${fmtD(card.maxPrice)}
                     </div>
                   </div>
                   <div className="alert-actions">
