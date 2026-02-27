@@ -195,9 +195,6 @@ export default function App() {
           <Watchlist
             watchlist={watchlist}
             removeCard={handleRemoveCard}
-            updateCard={updateCard}
-            scanCard={scanCard}
-            demoMode={settings.demoMode}
             toast={toast}
           />
         )}
