@@ -100,7 +100,7 @@
 
   .watch-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; transition: transform .2s, border-color .2s, box-shadow .2s; animation: slideIn .35s ease; }
   @keyframes slideIn { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
-  .watch-card:hover { transform: translateY(-3px); border-color: #3a3a48; box-shadow: 0 12px 40px rgba(0,0,0,.4); }
+  .watch-card:hover { transform: translateY(-3px); border-color: #b0b0b8; box-shadow: 0 12px 40px rgba(0,0,0,.1); }
   .watch-card.has-new { border-color: var(--green); }
   .new-badge { display: none; align-items: center; justify-content: center; gap: 6px; background: var(--green); color: #0d0d0f; font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: 2px; padding: 5px; }
   .has-new .new-badge { display: flex; }
@@ -250,7 +250,7 @@
     transition: opacity .1s;
     z-index: 20;
     white-space: nowrap;
-    box-shadow: 0 4px 16px rgba(0,0,0,.5);
+    box-shadow: 0 4px 16px rgba(0,0,0,.12);
     line-height: 1.7;
   }
   .chart-tooltip.visible { opacity: 1; }
@@ -348,7 +348,7 @@
   .cat-era-count { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
   .cat-sets-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 16px; }
   .cat-set-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; cursor: pointer; transition: transform .2s, border-color .2s, box-shadow .2s; animation: slideIn .3s ease both; }
-  .cat-set-card:hover { transform: translateY(-4px); border-color: #3a3a48; box-shadow: 0 10px 32px rgba(0,0,0,.5); }
+  .cat-set-card:hover { transform: translateY(-4px); border-color: #b0b0b8; box-shadow: 0 10px 32px rgba(0,0,0,.1); }
   .cat-set-img-wrap { width: 100%; aspect-ratio: 4/3; background: var(--surface2); display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .cat-set-logo { width: 82%; height: 82%; object-fit: contain; transition: transform .25s; }
   .cat-set-card:hover .cat-set-logo { transform: scale(1.06); }
@@ -634,7 +634,7 @@
       <h3>No alerts configured</h3>
       <p>Set a max price on any watchlist card to automatically create an alert</p>
     </div>
-    <div style="margin-top:32px;" id="alerts-history-section" style="display:none;">
+    <div style="margin-top:32px; display:none;" id="alerts-history-section">
       <div class="port-section-hdr"><span>Alert History</span></div>
       <div id="alerts-history"></div>
     </div>
@@ -1280,9 +1280,7 @@ function renderWatchlist() {
             ${[7,14,30].map(d => `<button class="range-btn ${cs && cs.range===d?'active':''}" onclick="switchChartRange('${card.id}',${d})">${d}d</button>`).join('')}
           </div>
         </div>
-        <canvas data-chart="${card.id}" height="120" style="width:100%;cursor:crosshair;"
-          onmousemove="hoverChart(event,this,'${card.id}')"
-          onmouseleave="leaveChart(this,'${card.id}')"></canvas>
+        <canvas data-chart="${card.id}" height="120" style="width:100%;cursor:crosshair;"></canvas>
         <div class="x-labels" id="xlabels-${card.id}"></div>
         <div class="grade-stats-grid">
           <div class="grade-stats-header">
@@ -1298,23 +1296,21 @@ function renderWatchlist() {
     </div>`;
   }).join('');
 
-  // Init charts after render
+  // Init charts after render — always re-init since innerHTML recreates canvas elements
   state.watchlist.forEach(card => {
     const canvas = document.querySelector(`[data-chart="${card.id}"]`);
-    if (canvas && !chartState[card.id]) initChart(card.id, canvas);
-    else if (canvas && chartState[card.id]) {
-      const cs = chartState[card.id];
-      drawMultiChart(canvas, cs.gradeData, cs.activeGrades, cs.range, null);
-      renderXLabels(card.id, cs.range);
+    if (canvas && chartState[card.id]) {
+      initChart(card.id, canvas);
+      renderXLabels(card.id, chartState[card.id].range);
     }
   });
 }
 
 function addCard() {
-  const name = document.getElementById('card-name').value.trim();
-  const set = document.getElementById('card-set').value.trim();
-  const condition = document.getElementById('card-condition').value;
-  const maxPrice = parseFloat(document.getElementById('card-max-price').value) || null;
+  const name = document.getElementById('inp-name').value.trim();
+  const set = document.getElementById('inp-set').value.trim();
+  const condition = document.getElementById('inp-condition').value;
+  const maxPrice = parseFloat(document.getElementById('inp-price').value) || null;
   if (!name) { toast('Please enter a card name', 'error'); return; }
   const card = {
     id: Date.now().toString(),
@@ -1323,11 +1319,16 @@ function addCard() {
     lastChecked: null, newListingsCount: 0, seenIds: [],
   };
   state.watchlist.push(card);
+  // Generate chart data for the new card
+  const gradeData = generateAllGrades(card);
+  const activeGrades = {};
+  GRADES.forEach(g => { activeGrades[g.key] = g.defaultOn; });
+  chartState[card.id] = { gradeData, activeGrades, range: 7, hover: null, source: 'mock' };
   save(); renderWatchlist(); updateStats();
   syncCardToServer(card);
-  document.getElementById('card-name').value = '';
-  document.getElementById('card-set').value = '';
-  document.getElementById('card-max-price').value = '';
+  document.getElementById('inp-name').value = '';
+  document.getElementById('inp-set').value = '';
+  document.getElementById('inp-price').value = '';
   toast(`Added "${name}" to watchlist!`);
 }
 
@@ -1344,7 +1345,7 @@ function removeCard(id) {
 // RENDER LISTINGS
 // =====================================================================
 function renderListings() {
-  const el = document.getElementById('listings-grid');
+  const el = document.getElementById('listings-container');
   if (!el) return;
   if (!state.listings.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No listings yet</div><div class="empty-desc">Scan a card to see live listings</div></div>`;
@@ -1364,6 +1365,49 @@ function renderListings() {
       </div>
     </div>`;
   }).join('');
+}
+
+async function searchListings(card) {
+  // Try server API first
+  if (!state.demoMode) {
+    try {
+      const params = new URLSearchParams({ name: card.name });
+      if (card.set) params.set('set', card.set);
+      if (card.condition) params.set('condition', card.condition);
+      if (card.maxPrice) params.set('maxPrice', card.maxPrice);
+      const res = await fetch(`/api/listings?${params}`);
+      if (res.ok) {
+        const json = await res.json();
+        return (json.data || []).map(l => ({
+          id: l.id || (l.title + l.price),
+          title: l.title || 'Listing',
+          price: l.price || 0,
+          url: l.url || '#',
+          type: l.type || 'buynow',
+          timeLeft: l.timeLeft || null,
+        }));
+      }
+    } catch(e) { console.warn('searchListings API failed:', e.message); }
+  }
+  // Demo mode: generate mock listings
+  const base = getRawBasePrice(card.name);
+  const rand = mulberry32(card.id.split('').reduce((a,c,i) => a + c.charCodeAt(0)*(i+1), 0));
+  const count = Math.floor(rand() * 5) + 3;
+  const results = [];
+  for (let i = 0; i < count; i++) {
+    const variance = 0.7 + rand() * 0.6;
+    const price = Math.round(base * variance * 100);
+    const isAuction = rand() > 0.55;
+    results.push({
+      id: card.id + '-listing-' + i,
+      title: `${card.name}${card.set ? ' ' + card.set : ''} ${card.condition || 'NM'} Pokemon Card`,
+      price,
+      url: '#',
+      type: isAuction ? 'auction' : 'buynow',
+      timeLeft: isAuction ? Math.floor(rand() * 6 + 1) + 'h ' + Math.floor(rand() * 59) + 'm' : null,
+    });
+  }
+  return results;
 }
 
 async function scanCard(cardId) {
@@ -1885,24 +1929,23 @@ async function openSetModal(setId) {
   overlay.onclick = (e) => { if (e.target === overlay) closeSetModal(); };
 
   overlay.innerHTML = `
-    <div class="modal-panel" id="set-modal">
+    <div class="modal" id="set-modal">
       <div class="modal-header">
-        <div class="modal-header-left">
-          <img class="modal-set-logo" src="${logoUrl}" alt="${set.name}" onerror="this.style.display='none'">
-          <div>
-            <div class="modal-set-title">${set.name}</div>
-            <div class="modal-set-subtitle">${set.series} &middot; Released ${set.releaseDate} &middot; ${set.printedTotal || set.total || '?'} cards</div>
-          </div>
+        <img class="modal-set-logo" src="${logoUrl}" alt="${set.name}" onerror="this.style.display='none'">
+        <div>
+          <div class="modal-set-name">${set.name}</div>
+          <div class="modal-set-sub">${set.series} &middot; Released ${set.releaseDate} &middot; ${set.printedTotal || set.total || '?'} cards</div>
         </div>
         <button class="modal-close" onclick="closeSetModal()">&#x2715;</button>
       </div>
-      <div class="modal-search-row">
-        <input class="modal-search" placeholder="Search cards..." oninput="filterModalCards(this.value)">
-        <div class="rarity-filters">
-          <button class="rarity-btn active" onclick="setRarityFilter(this,'all')">All</button>
-          <button class="rarity-btn" onclick="setRarityFilter(this,'holo')">Holo+</button>
-          <button class="rarity-btn" onclick="setRarityFilter(this,'ultra')">Ultra Rare</button>
-          <button class="rarity-btn" onclick="setRarityFilter(this,'secret')">Secret</button>
+      <div class="modal-toolbar">
+        <div class="modal-search-wrap"><input placeholder="Search cards..." oninput="filterModalCards(this.value)"></div>
+        <span id="modal-card-count" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-left:auto;"></span>
+        <div style="display:flex;gap:6px;">
+          <button class="modal-filter-btn active" onclick="setRarityFilter(this,'all')">All</button>
+          <button class="modal-filter-btn" onclick="setRarityFilter(this,'holo')">Holo+</button>
+          <button class="modal-filter-btn" onclick="setRarityFilter(this,'ultra')">Ultra Rare</button>
+          <button class="modal-filter-btn" onclick="setRarityFilter(this,'secret')">Secret</button>
         </div>
       </div>
       <div class="modal-body" id="modal-body">
@@ -2260,7 +2303,7 @@ function clearAlert(cardId) {
 function openAddPortfolioModal(prefill) {
   const el = document.getElementById('modal-root');
   el.innerHTML = `
-    <div class="add-modal-overlay" id="port-modal-overlay" onclick="e => { if(e.target===this) closePortModal() }">
+    <div class="add-modal-overlay" id="port-modal-overlay" onclick="if(event.target===this) closePortModal()">
       <div class="add-modal" style="width:440px;" onclick="event.stopPropagation()">
         <h3>${prefill ? 'Edit Card' : 'Add to Portfolio'}</h3>
         <div class="add-modal-set" style="margin-bottom:18px;">Track a card you own</div>
@@ -2325,8 +2368,8 @@ function savePortfolioCard(editId) {
     if (idx >= 0) state.portfolio[idx] = item;
   } else {
     state.portfolio.push(item);
-  syncPortfolioToServer(item);
   }
+  syncPortfolioToServer(item);
   save(); closePortModal(); renderPortfolio();
   toast(editId ? 'Card updated' : `"${name}" added to portfolio`);
 }
@@ -2354,7 +2397,7 @@ function getEstimatedValue(item) {
   const gradeMulti = condMulti[item.condition] || 1.0;
   const sales = generateGradeSales(fakeId, gradeKey, baseRaw, gradeMulti);
   const stats7 = computeStats(sales, 7);
-  return stats7 ? (stats7.avg / 100) : (baseRaw * gradeMulti);
+  return stats7 ? stats7.avg : (baseRaw * gradeMulti);
 }
 
 // Async: pre-fetch live prices for all portfolio items, then re-render
