@@ -9,8 +9,9 @@ function authHeaders() {
 
 function handle401(r) {
   if (r.status === 401) {
+    const hadToken = !!localStorage.getItem(TOKEN_KEY);
     localStorage.removeItem(TOKEN_KEY);
-    window.location.reload();
+    if (hadToken) window.location.reload();
   }
 }
 
