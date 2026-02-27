@@ -7,16 +7,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Bangers&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #ffffff;
-    --surface: #f5f5f7;
-    --surface2: #eeeef0;
-    --border: #d1d1d6;
+    --bg: #0d0d0f;
+    --surface: #16161a;
+    --surface2: #1e1e24;
+    --border: #2a2a35;
     --yellow: #f9e100;
     --red: #e63946;
     --blue: #4cc9f0;
     --green: #57cc99;
     --orange: #ff9f1c;
-    --text: #1a1a1a;
+    --text: #e8e8f0;
     --muted: #6b6b80;
     --card-w: 400px;
 
@@ -51,7 +51,7 @@
   header {
     z-index: 10;
     border-bottom: 1px solid var(--border);
-    background: rgba(255,255,255,0.95);
+    background: rgba(13,13,15,0.92);
     backdrop-filter: blur(12px);
     padding: 0 32px;
     display: flex; align-items: center; justify-content: space-between;
@@ -100,7 +100,7 @@
 
   .watch-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; transition: transform .2s, border-color .2s, box-shadow .2s; animation: slideIn .35s ease; }
   @keyframes slideIn { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
-  .watch-card:hover { transform: translateY(-3px); border-color: #b0b0b8; box-shadow: 0 12px 40px rgba(0,0,0,.1); }
+  .watch-card:hover { transform: translateY(-3px); border-color: #3a3a48; box-shadow: 0 12px 40px rgba(0,0,0,.4); }
   .watch-card.has-new { border-color: var(--green); }
   .new-badge { display: none; align-items: center; justify-content: center; gap: 6px; background: var(--green); color: #0d0d0f; font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: 2px; padding: 5px; }
   .has-new .new-badge { display: flex; }
@@ -121,7 +121,7 @@
     gap: 6px;
     padding: 10px 20px;
     border-bottom: 1px solid var(--border);
-    background: rgba(0,0,0,.05);
+    background: rgba(0,0,0,.2);
     flex-wrap: wrap;
     align-items: center;
   }
@@ -202,7 +202,7 @@
     display: grid;
     grid-template-columns: 80px 1fr 1fr 1fr;
     padding: 6px 0;
-    background: rgba(0,0,0,.03);
+    background: rgba(0,0,0,.15);
   }
   .grade-stats-header div {
     text-align: center;
@@ -239,7 +239,7 @@
 
   .chart-tooltip {
     position: absolute;
-    background: #f5f5f7;
+    background: #12121a;
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 7px 11px;
@@ -250,7 +250,7 @@
     transition: opacity .1s;
     z-index: 20;
     white-space: nowrap;
-    box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    box-shadow: 0 4px 16px rgba(0,0,0,.5);
     line-height: 1.7;
   }
   .chart-tooltip.visible { opacity: 1; }
@@ -320,7 +320,7 @@
   .empty-state h3 { font-family: 'Bangers', cursive; font-size: 28px; letter-spacing: 1px; color: var(--text); margin-bottom: 8px; }
 
   #toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
-  .toast { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: 8px; padding: 14px 18px; font-size: 13px; max-width: 320px; animation: toastIn .3s ease; box-shadow: 0 8px 32px rgba(0,0,0,.12); }
+  .toast { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: 8px; padding: 14px 18px; font-size: 13px; max-width: 320px; animation: toastIn .3s ease; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
   .toast.error { border-left-color: var(--red); }
   @keyframes toastIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
 
@@ -348,7 +348,7 @@
   .cat-era-count { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
   .cat-sets-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 16px; }
   .cat-set-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; cursor: pointer; transition: transform .2s, border-color .2s, box-shadow .2s; animation: slideIn .3s ease both; }
-  .cat-set-card:hover { transform: translateY(-4px); border-color: #b0b0b8; box-shadow: 0 10px 32px rgba(0,0,0,.1); }
+  .cat-set-card:hover { transform: translateY(-4px); border-color: #3a3a48; box-shadow: 0 10px 32px rgba(0,0,0,.5); }
   .cat-set-img-wrap { width: 100%; aspect-ratio: 4/3; background: var(--surface2); display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .cat-set-logo { width: 82%; height: 82%; object-fit: contain; transition: transform .25s; }
   .cat-set-card:hover .cat-set-logo { transform: scale(1.06); }
@@ -360,7 +360,7 @@
   .cat-set-count { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--blue); }
 
   /* ======== CARD MODAL ======== */
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); backdrop-filter: blur(8px); z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px 48px; overflow-y: auto; animation: fadeIn .2s ease; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); backdrop-filter: blur(8px); z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px 48px; overflow-y: auto; animation: fadeIn .2s ease; }
   @keyframes fadeIn { from{opacity:0} to{opacity:1} }
   .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 1100px; overflow: hidden; animation: modalIn .25s ease; position: relative; flex-shrink: 0; }
   @keyframes modalIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
@@ -370,7 +370,7 @@
   .modal-set-sub { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); margin-top: 3px; }
   .modal-close { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; }
   .modal-close:hover { border-color: var(--red); color: var(--red); }
-  .modal-toolbar { padding: 12px 28px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: rgba(0,0,0,.03); }
+  .modal-toolbar { padding: 12px 28px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: rgba(0,0,0,.15); }
   .modal-search-wrap { position: relative; }
   .modal-search-wrap input { width: 220px; padding: 7px 12px 7px 30px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; font-family: 'DM Sans', sans-serif; outline: none; }
   .modal-search-wrap input:focus { border-color: var(--yellow); }
@@ -386,7 +386,7 @@
   .tcg-card:hover { transform: translateY(-3px); border-color: #3a3a48; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
   .tcg-card.on-watchlist { border-color: rgba(87,204,153,.5); }
   .tcg-card.on-watchlist .btn-add-watch { border-color: var(--green); color: var(--green); background: rgba(87,204,153,.08); }
-  .tcg-card-img-wrap { width: 100%; aspect-ratio: 2.5/3.5; background: #eeeef0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .tcg-card-img-wrap { width: 100%; aspect-ratio: 2.5/3.5; background: #0a0a0e; display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .tcg-card-img { width: 100%; height: 100%; object-fit: contain; transition: transform .3s; }
   .tcg-card:hover .tcg-card-img { transform: scale(1.04); }
   .tcg-card-img-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; font-size: 32px; opacity: .2; }
@@ -402,7 +402,7 @@
   .btn-add-watch:hover { border-color: var(--yellow); color: var(--yellow); background: rgba(249,225,0,.06); }
 
   /* Add to watchlist mini modal */
-  .add-modal-overlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.3); backdrop-filter: blur(4px); animation: fadeIn .15s ease; }
+  .add-modal-overlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.65); backdrop-filter: blur(4px); animation: fadeIn .15s ease; }
   .add-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px 28px 24px; width: 380px; animation: modalIn .2s ease; position: relative; }
   .add-modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
   .add-modal-set { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-bottom: 20px; }
@@ -448,7 +448,7 @@
   .port-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; animation: slideIn .3s ease both; transition: border-color .2s, box-shadow .2s; }
   .port-card:hover { border-color: #3a3a48; box-shadow: 0 8px 28px rgba(0,0,0,.4); }
   .port-card-header { padding: 14px 16px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 12px; }
-  .port-tcg-img { width: 52px; height: 72px; object-fit: contain; border-radius: 4px; flex-shrink: 0; background: #eeeef0; }
+  .port-tcg-img { width: 52px; height: 72px; object-fit: contain; border-radius: 4px; flex-shrink: 0; background: #0a0a0e; }
   .port-card-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; line-height: 1.3; }
   .port-card-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
   .port-card-body { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--border); }
