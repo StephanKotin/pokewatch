@@ -534,9 +534,12 @@
 }
 
 .tag-grade10 {
-  background: rgba(249, 225, 0, 0.18) !important;
-  color: #f9e100;
-  font-weight: 700;
+  background: linear-gradient(135deg, #ffe600, #f9a800) !important;
+  color: #1a1400;
+  font-weight: 800;
+  border: 1px solid #ffe600;
+  box-shadow: 0 0 10px rgba(249, 225, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 .tag {
