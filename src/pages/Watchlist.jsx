@@ -67,6 +67,9 @@ export default function Watchlist({ watchlist, removeCard, toast }) {
                     {card.condition && card.condition !== 'Any' && (
                       <span className="wl-tag">{card.condition}</span>
                     )}
+                    {card.edition === '1st Edition' && (
+                      <span className="wl-tag wl-tag-edition">1st Ed</span>
+                    )}
                   </div>
                 </div>
                 <div className="wl-chart-placeholder">Price chart coming soon</div>
@@ -98,6 +101,7 @@ export default function Watchlist({ watchlist, removeCard, toast }) {
                 <div className="wl-list-set">{card.set || '—'}</div>
                 <div className="wl-list-cond">
                   {card.condition && card.condition !== 'Any' ? card.condition : '—'}
+                  {card.edition === '1st Edition' && ' · 1st Ed'}
                 </div>
                 <div className="wl-list-chart">—</div>
                 <button

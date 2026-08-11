@@ -21,11 +21,3 @@ export const CONDITION_TO_GRADE = {
   'Heavily Played': 'hp',
   'Damaged': 'dmg',
 };
-
-export const CONDITION_MULTIPLIER = {
-  'Near Mint': 1.0,
-  'Lightly Played': 0.8,
-  'Mod. Played': 0.6,
-  'Heavily Played': 0.4,
-  'Damaged': 0.25,
-};

@@ -17,6 +17,8 @@
   letter-spacing: 2px;
   color: var(--yellow);
   text-shadow: 2px 2px 0 rgba(249, 225, 0, 0.2);
+  text-decoration: none;
+  cursor: pointer;
 }
 .logo span {
   color: var(--text);

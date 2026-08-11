@@ -3,18 +3,12 @@ import Toggle from '../components/Toggle';
 import './Settings.css';
 
 export default function Settings({ settings, updateSettings, onClearData, onExportData, toast }) {
-  const [apiKey, setApiKey] = useState(settings.tcgApiKey || '');
   const [scanInterval, setScanInterval] = useState(settings.scanInterval || 0);
   const [soundAlerts, setSoundAlerts] = useState(settings.soundAlerts || false);
   const [browserNotifs, setBrowserNotifs] = useState(settings.browserNotifications || false);
   const [includeAuctions, setIncludeAuctions] = useState(settings.includeAuctions !== false);
   const [usOnly, setUsOnly] = useState(settings.usOnly || false);
   const [freeShipping, setFreeShipping] = useState(settings.freeShipping || false);
-
-  function handleSaveSettings() {
-    updateSettings({ tcgApiKey: apiKey });
-    if (toast) toast('Settings saved');
-  }
 
   function handleSaveScan() {
     updateSettings({
@@ -58,24 +52,6 @@ export default function Settings({ settings, updateSettings, onClearData, onExpo
             </div>
             <span className="connected-badge">Connected</span>
           </div>
-
-          <div className="setting-row">
-            <div>
-              <div className="setting-label">TCG API Key</div>
-              <div className="setting-desc">Optional key for enhanced data</div>
-            </div>
-            <input
-              type="password"
-              className="input"
-              placeholder="Enter API key..."
-              value={apiKey}
-              onChange={e => setApiKey(e.target.value)}
-            />
-          </div>
-
-          <button className="btn btn-primary" onClick={handleSaveSettings}>
-            Save Settings
-          </button>
         </div>
 
         {/* Scan Settings */}

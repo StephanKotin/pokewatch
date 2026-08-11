@@ -116,6 +116,12 @@
   border-radius: 4px;
 }
 
+.wl-tag-edition {
+  background: rgba(249, 225, 0, 0.14);
+  color: #f9e100;
+  font-weight: 600;
+}
+
 .wl-chart-placeholder {
   margin: 6px 12px;
   height: 60px;

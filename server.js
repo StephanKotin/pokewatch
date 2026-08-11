@@ -13,7 +13,91 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const POKETRACE_API_KEY = process.env.POKETRACE_API_KEY;
 const POKETRACE_BASE = 'https://api.poketrace.com/v1';
+const POKEMONTCGIO_API_KEY = process.env.POKEMONTCGIO_API_KEY;
+const POKEMONTCGIO_BASE = 'https://api.pokemontcg.io/v2';
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+
+const PRICE_CONDITIONS = { nm: 'NEAR_MINT', lp: 'LIGHTLY_PLAYED', mp: 'MODERATELY_PLAYED', hp: 'HEAVILY_PLAYED', dmg: 'DAMAGED' };
+
+// pokemontcg.io prices by print variant (normal/holofoil/etc.), not by wear
+// condition, so it can only stand in for a Near Mint quote. Used as a free
+// fallback when PokeTrace has no eBay/TCGPlayer comps for a card, keyed by
+// pokemontcg.io's own card id (the same id we already store as card_id).
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// pokemontcg.io's Cloudflare front intermittently 500s/502s under normal
+// load (confirmed by hand, recovering seconds later) with no fault of the
+// request itself. Without a retry, that one blip permanently strands a card
+// on "No data" until something unrelated happens to re-trigger the fetch —
+// e.g. a page refresh, which is why prices only seemed to show up on reload.
+async function fetchPokemonTcgIoPrice(cardId, attempt = 1) {
+  const MAX_ATTEMPTS = 3;
+  try {
+    const headers = { 'User-Agent': 'pokewatch/1.0' };
+    if (POKEMONTCGIO_API_KEY) headers['X-Api-Key'] = POKEMONTCGIO_API_KEY;
+    const response = await fetch(`${POKEMONTCGIO_BASE}/cards/${encodeURIComponent(cardId)}`, { headers });
+    if (!response.ok) {
+      if (response.status >= 500 && attempt < MAX_ATTEMPTS) {
+        await sleep(400 * attempt);
+        return fetchPokemonTcgIoPrice(cardId, attempt + 1);
+      }
+      return null;
+    }
+    const { data: card } = await response.json();
+    const variants = card && card.tcgplayer && card.tcgplayer.prices;
+    if (!variants) return null;
+    const preferred = ['normal', 'holofoil', 'reverseHolofoil', '1stEditionHolofoil', '1stEditionNormal'];
+    for (const variant of preferred) {
+      const v = variants[variant];
+      if (v && v.market) return { avg: v.market, low: v.low ?? v.market, high: v.high ?? v.market };
+    }
+    return null;
+  } catch (e) {
+    if (attempt < MAX_ATTEMPTS) {
+      await sleep(400 * attempt);
+      return fetchPokemonTcgIoPrice(cardId, attempt + 1);
+    }
+    console.warn('[pokemontcgio] lookup failed:', e.message);
+    return null;
+  }
+}
+
+// Looks up a card's price via PokeTrace (real per-condition eBay/TCGPlayer
+// comps); if it has no Near Mint quote and a real card id is known, fills
+// that gap from pokemontcg.io. Returns a card shaped like PokeTrace's own
+// response so callers don't need to know which source actually answered.
+async function lookupCardPrices(name, set, realCardId, edition) {
+  let card = null;
+  try {
+    // pokemontcg.io has no concept of print edition (checked — the source
+    // data has exactly one entry per card, 1st Edition or not), so this is
+    // the only place "1st Edition" can factor in: as extra search text
+    // against PokeTrace's real eBay comps.
+    const searchName = edition && edition !== 'Unlimited' ? `${name} ${edition}` : name;
+    const params = new URLSearchParams({ search: searchName, market: 'US' });
+    if (set) params.set('set', set);
+    const response = await fetch(`${POKETRACE_BASE}/cards?${params}`, {
+      headers: { 'X-API-Key': POKETRACE_API_KEY }
+    });
+    const data = await response.json();
+    card = (data.data || [])[0] || null;
+  } catch (e) {
+    console.warn('[prices] PokeTrace lookup failed:', e.message);
+  }
+
+  const hasNearMint = (card?.prices?.ebay?.NEAR_MINT?.avg) || (card?.prices?.tcgplayer?.NEAR_MINT?.avg);
+  let fallbackSource = null;
+  if (!hasNearMint && realCardId) {
+    const fb = await fetchPokemonTcgIoPrice(realCardId);
+    if (fb) {
+      card = card || { id: realCardId, name };
+      card.prices = { ...(card.prices || {}) };
+      card.prices.tcgplayer = { ...(card.prices.tcgplayer || {}), NEAR_MINT: fb };
+      fallbackSource = 'pokemontcgio';
+    }
+  }
+  return { card, fallbackSource };
+}
 
 const db = new Database(path.join(__dirname, 'pokewatch.db'));
 db.exec(`
@@ -83,7 +167,13 @@ try { db.exec("ALTER TABLE watchlist ADD COLUMN user_id TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE watchlist ADD COLUMN image TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE watchlist ADD COLUMN number TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE watchlist ADD COLUMN set_id TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE watchlist ADD COLUMN edition TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE portfolio ADD COLUMN user_id TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE portfolio ADD COLUMN card_id TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE portfolio ADD COLUMN image TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE portfolio ADD COLUMN number TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE portfolio ADD COLUMN set_id TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE portfolio ADD COLUMN edition TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE alerts ADD COLUMN user_id TEXT"); } catch(e) {}
 
 // Auth middleware
@@ -199,27 +289,60 @@ app.put('/api/settings', authenticate, (req, res) => {
 
 // --- Public Routes (shared data, no auth needed) ---
 
+const PRICE_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60; // "once per day" per card
+
+// Returns the most recent snapshot per grade for a card, but only the ones
+// still within the cache window — so a card with only a week-old Near Mint
+// snapshot counts as stale, not "partially fresh".
+function getFreshSnapshot(snapshotId, maxAgeSeconds) {
+  const cutoff = Math.floor(Date.now() / 1000) - maxAgeSeconds;
+  const rows = db
+    .prepare(
+      `SELECT grade, price, low, high, MAX(captured_at) AS captured_at
+       FROM price_snapshots
+       WHERE card_id = ? AND captured_at >= ?
+       GROUP BY grade`
+    )
+    .all(snapshotId, cutoff);
+  return rows.length ? rows : null;
+}
+
+function cardFromSnapshotRows(id, name, rows) {
+  const prices = {};
+  for (const row of rows) {
+    const field = PRICE_CONDITIONS[row.grade];
+    if (field) prices[field] = { avg: row.price, low: row.low, high: row.high };
+  }
+  return { id, name, prices: { tcgplayer: prices } };
+}
+
 app.get('/api/prices', async (req, res) => {
-  const { name, set } = req.query;
+  const { name, set, cardId, edition } = req.query;
   if (!name) return res.status(400).json({ error: 'name required' });
   try {
-    const params = new URLSearchParams({ search: name, market: 'US' });
-    if (set) params.set('set', set);
-    const response = await fetch(`${POKETRACE_BASE}/cards?${params}`, {
-      headers: { 'X-API-Key': POKETRACE_API_KEY }
-    });
-    const data = await response.json();
-    const card = (data.data || [])[0];
+    // 1st Edition and Unlimited copies of the same card_id are different
+    // collectibles with very different prices — keep their snapshots apart.
+    const editionSuffix = edition && edition !== 'Unlimited' ? '-1st' : '';
+    const snapshotId = (cardId || name).toLowerCase() + editionSuffix;
+
+    const cached = getFreshSnapshot(snapshotId, PRICE_CACHE_MAX_AGE_SECONDS);
+    if (cached) {
+      return res.json({ data: [cardFromSnapshotRows(cardId || null, name, cached)] });
+    }
+
+    const { card, fallbackSource } = await lookupCardPrices(name, set, cardId, edition);
     if (card && card.prices) {
-      const conditions = { nm: 'NEAR_MINT', lp: 'LIGHTLY_PLAYED', mp: 'MODERATELY_PLAYED', hp: 'HEAVILY_PLAYED', dmg: 'DAMAGED' };
-      const insert = db.prepare('INSERT INTO price_snapshots (card_id, grade, price, low, high) VALUES (?, ?, ?, ?, ?)');
+      const insert = db.prepare('INSERT INTO price_snapshots (card_id, grade, price, low, high, source) VALUES (?, ?, ?, ?, ?, ?)');
       const src = card.prices.ebay || card.prices.tcgplayer || {};
-      for (const [key, field] of Object.entries(conditions)) {
+      for (const [key, field] of Object.entries(PRICE_CONDITIONS)) {
         const p = src[field];
-        if (p && p.avg) insert.run(name.toLowerCase(), key, p.avg, p.low || null, p.high || null);
+        if (p && p.avg) {
+          const label = field === 'NEAR_MINT' && fallbackSource ? fallbackSource : 'poketrace';
+          insert.run(snapshotId, key, p.avg, p.low || null, p.high || null, label);
+        }
       }
     }
-    res.json(data);
+    res.json({ data: card ? [card] : [] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -243,7 +366,7 @@ app.get('/api/listings', async (req, res) => {
 });
 
 app.get('/api/history/:cardId', (req, res) => {
-  const rows = db.prepare('SELECT grade, price, low, high, captured_at FROM price_snapshots WHERE card_id = ? ORDER BY captured_at ASC').all(req.params.cardId.toLowerCase());
+  const rows = db.prepare('SELECT grade, price, low, high, source, captured_at FROM price_snapshots WHERE card_id = ? ORDER BY captured_at ASC').all(req.params.cardId.toLowerCase());
   res.json(rows);
 });
 
@@ -254,8 +377,8 @@ app.get('/api/watchlist', authenticate, (req, res) => {
 });
 
 app.post('/api/watchlist', authenticate, (req, res) => {
-  const { id, name, set_name, condition, max_price, image, number, set_id } = req.body;
-  db.prepare('INSERT OR REPLACE INTO watchlist (id, name, set_name, condition, max_price, image, number, set_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, name, set_name || null, condition || null, max_price || null, image || null, number || null, set_id || null, req.userId);
+  const { id, name, set_name, condition, max_price, image, number, set_id, edition } = req.body;
+  db.prepare('INSERT OR REPLACE INTO watchlist (id, name, set_name, condition, max_price, image, number, set_id, edition, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, name, set_name || null, condition || null, max_price || null, image || null, number || null, set_id || null, edition || null, req.userId);
   res.json({ ok: true });
 });
 
@@ -269,8 +392,8 @@ app.get('/api/portfolio', authenticate, (req, res) => {
 });
 
 app.post('/api/portfolio', authenticate, (req, res) => {
-  const { id, name, set_name, condition, purchase_price, purchase_date, notes } = req.body;
-  db.prepare('INSERT OR REPLACE INTO portfolio (id, name, set_name, condition, purchase_price, purchase_date, notes, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, name, set_name || null, condition || null, purchase_price || null, purchase_date || null, notes || null, req.userId);
+  const { id, name, set_name, condition, purchase_price, purchase_date, notes, card_id, image, number, set_id, edition } = req.body;
+  db.prepare('INSERT OR REPLACE INTO portfolio (id, name, set_name, condition, purchase_price, purchase_date, notes, card_id, image, number, set_id, edition, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, name, set_name || null, condition || null, purchase_price || null, purchase_date || null, notes || null, card_id || null, image || null, number || null, set_id || null, edition || null, req.userId);
   res.json({ ok: true });
 });
 
@@ -291,39 +414,54 @@ app.post('/api/alerts', authenticate, (req, res) => {
 
 // --- Cron Job ---
 
-cron.schedule('0 */6 * * *', async () => {
+async function scanPrices() {
   console.log('[cron] Running background price scan...');
-  const cards = db.prepare('SELECT * FROM watchlist').all();
-  for (const card of cards) {
+
+  // De-duplicate watchlist + portfolio into one lookup per snapshot key,
+  // matching how the frontend keys price_snapshots (cardId, falling back to
+  // name, with a -1st suffix keeping 1st Edition copies out of the same
+  // bucket as Unlimited copies of the same card).
+  const targets = new Map();
+  const keyFor = (id, edition) => id.toLowerCase() + (edition && edition !== 'Unlimited' ? '-1st' : '');
+
+  for (const card of db.prepare('SELECT * FROM watchlist').all()) {
+    targets.set(keyFor(card.id, card.edition), { name: card.name, set: card.set_name, realCardId: card.id, edition: card.edition, watchlistCard: card });
+  }
+  for (const item of db.prepare('SELECT * FROM portfolio').all()) {
+    const key = keyFor(item.card_id || item.name, item.edition);
+    if (!targets.has(key)) targets.set(key, { name: item.name, set: item.set_name, realCardId: item.card_id || null, edition: item.edition });
+  }
+
+  const insert = db.prepare('INSERT INTO price_snapshots (card_id, grade, price, low, high, source) VALUES (?, ?, ?, ?, ?, ?)');
+
+  for (const [snapshotId, target] of targets) {
     try {
-      const params = new URLSearchParams({ search: card.name, market: 'US' });
-      if (card.set_name) params.set('set', card.set_name);
-      const response = await fetch(`${POKETRACE_BASE}/cards?${params}`, {
-        headers: { 'X-API-Key': POKETRACE_API_KEY }
-      });
-      const data = await response.json();
-      const pt = (data.data || [])[0];
-      if (!pt || !pt.prices || !pt.prices.ebay) continue;
-      const conditions = { nm: 'NEAR_MINT', lp: 'LIGHTLY_PLAYED', mp: 'MODERATELY_PLAYED', hp: 'HEAVILY_PLAYED', dmg: 'DAMAGED' };
-      const insert = db.prepare('INSERT INTO price_snapshots (card_id, grade, price, low, high) VALUES (?, ?, ?, ?, ?)');
-      const src = pt.prices.ebay || pt.prices.tcgplayer || {};
-      for (const [key, field] of Object.entries(conditions)) {
+      const { card, fallbackSource } = await lookupCardPrices(target.name, target.set, target.realCardId, target.edition);
+      if (!card || !card.prices) continue;
+      const src = card.prices.ebay || card.prices.tcgplayer || {};
+      for (const [key, field] of Object.entries(PRICE_CONDITIONS)) {
         const p = src[field];
-        if (p && p.avg) insert.run(card.id, key, p.avg, p.low || null, p.high || null);
+        if (p && p.avg) {
+          const label = field === 'NEAR_MINT' && fallbackSource ? fallbackSource : 'poketrace';
+          insert.run(snapshotId, key, p.avg, p.low || null, p.high || null, label);
+        }
       }
-      if (card.max_price) {
+      const watchlistCard = target.watchlistCard;
+      if (watchlistCard && watchlistCard.max_price) {
         const rawPrice = src['NEAR_MINT'] && src['NEAR_MINT'].avg;
-        if (rawPrice && rawPrice <= card.max_price) {
-          db.prepare('INSERT INTO alerts (card_id, card_name, price, threshold, user_id) VALUES (?, ?, ?, ?, ?)').run(card.id, card.name, rawPrice, card.max_price, card.user_id);
-          console.log(`[alert] ${card.name} hit threshold: $${rawPrice} <= $${card.max_price}`);
+        if (rawPrice && rawPrice <= watchlistCard.max_price) {
+          db.prepare('INSERT INTO alerts (card_id, card_name, price, threshold, user_id) VALUES (?, ?, ?, ?, ?)').run(watchlistCard.id, watchlistCard.name, rawPrice, watchlistCard.max_price, watchlistCard.user_id);
+          console.log(`[alert] ${watchlistCard.name} hit threshold: $${rawPrice} <= $${watchlistCard.max_price}`);
         }
       }
     } catch (e) {
-      console.error(`[cron] Error scanning ${card.name}:`, e.message);
+      console.error(`[cron] Error scanning ${target.name}:`, e.message);
     }
   }
   console.log('[cron] Scan complete.');
-});
+}
+
+cron.schedule('0 */6 * * *', scanPrices);
 
 // SPA fallback - serve index.html for non-API routes
 app.get('*', (req, res) => {

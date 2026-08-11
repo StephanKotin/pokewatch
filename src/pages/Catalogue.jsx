@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { ALL_SETS, JP_SETS } from '../data/sets';
 import { ERAS, getEra } from '../data/eraMap';
+import { EDITIONS, isEditionEligible } from '../data/editions';
 import { fetchTCGCards, TCG_CDN } from '../api/poketrace';
 import { rarityClass } from '../utils/format';
 import './Catalogue.css';
@@ -24,6 +25,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
   const [addTarget, setAddTarget] = useState(null);
   const [addMode, setAddMode] = useState('watchlist');
   const [addCondition, setAddCondition] = useState('Near Mint');
+  const [addEdition, setAddEdition] = useState('Unlimited');
   const [addMaxPrice, setAddMaxPrice] = useState('');
   const [addPurchasePrice, setAddPurchasePrice] = useState('');
   const [addPurchaseDate, setAddPurchaseDate] = useState('');
@@ -146,15 +148,19 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
     setAddTarget(card);
     setAddMode(mode);
     setAddCondition('Near Mint');
+    setAddEdition('Unlimited');
     setAddMaxPrice('');
     setAddPurchasePrice('');
     setAddPurchaseDate('');
     setAddNotes('');
   };
 
+  const editionEligible = modalSet ? isEditionEligible(modalSet.id) : false;
+
   /* ---- submit add ---- */
   const handleAddSubmit = () => {
     if (!addTarget) return;
+    const edition = editionEligible ? addEdition : null;
 
     if (addMode === 'watchlist') {
       addCard({
@@ -167,6 +173,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
         rarity: addTarget.rarity || '',
         image: addTarget.images?.small || `${TCG_CDN}/${modalSet?.id}/${addTarget.number}.png`,
         condition: addCondition,
+        edition,
         maxPrice: addMaxPrice ? parseFloat(addMaxPrice) : null,
       });
       toast && toast(`${addTarget.name} added to watchlist`);
@@ -181,6 +188,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
         rarity: addTarget.rarity || '',
         image: addTarget.images?.small || `${TCG_CDN}/${modalSet?.id}/${addTarget.number}.png`,
         condition: addCondition,
+        edition,
         purchasePrice: addPurchasePrice ? parseFloat(addPurchasePrice) : null,
         purchaseDate: addPurchaseDate || null,
         notes: addNotes,
@@ -440,6 +448,17 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
                 <option>Damaged</option>
               </select>
             </div>
+
+            {editionEligible && (
+              <div className="form-group">
+                <label>Edition</label>
+                <select value={addEdition} onChange={(e) => setAddEdition(e.target.value)}>
+                  {EDITIONS.map((e) => (
+                    <option key={e}>{e}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {addMode === 'watchlist' && (
               <div className="form-group">

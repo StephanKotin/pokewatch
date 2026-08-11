@@ -1,4 +1,5 @@
 export const ERA_MAP = {
+  'Mega Evolution':       { key: 'me',   label: 'Mega Evolution',      color: '#ff4d94' },
   'Scarlet & Violet':     { key: 'sv',   label: 'Scarlet & Violet',    color: '#e63946' },
   'Sword & Shield':       { key: 'swsh', label: 'Sword & Shield',      color: '#4cc9f0' },
   'Sun & Moon':           { key: 'sm',   label: 'Sun & Moon',          color: '#ff9f1c' },

@@ -3,6 +3,11 @@
   gap: 4px;
   margin-bottom: 32px;
   border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 64px; /* sits flush beneath .app-header, which is sticky at top: 0 */
+  z-index: 9;
+  background: rgba(13, 13, 15, 0.92);
+  backdrop-filter: blur(12px);
 }
 .tab {
   font-family: 'DM Mono', monospace;

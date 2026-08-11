@@ -1,12 +1,19 @@
 import React from 'react';
 import './Header.css';
 
-export default function Header({ watchingCount, listingsCount, user, onLogout }) {
+export default function Header({ watchingCount, listingsCount, user, onLogout, onLogoClick }) {
   return (
     <header className="app-header">
-      <div className="logo">
+      <a
+        href="/"
+        className="logo"
+        onClick={(e) => {
+          e.preventDefault();
+          onLogoClick();
+        }}
+      >
         Poke<span>Watch</span>
-      </div>
+      </a>
       <div className="header-stats">
         <div className="stat-pill">
           <b>{watchingCount}</b> watching

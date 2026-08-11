@@ -19,6 +19,11 @@ export function usePortfolio() {
               purchasePrice: row.purchase_price || null,
               purchaseDate: row.purchase_date || '',
               notes: row.notes || '',
+              cardId: row.card_id || null,
+              image: row.image || null,
+              number: row.number || null,
+              setId: row.set_id || null,
+              edition: row.edition || null,
             }))
           );
         }
@@ -48,6 +53,11 @@ export function usePortfolio() {
       purchase_price: item.purchasePrice || null,
       purchase_date: item.purchaseDate || null,
       notes: item.notes || null,
+      card_id: item.cardId || null,
+      image: item.image || null,
+      number: item.number || null,
+      set_id: item.setId || null,
+      edition: item.edition || null,
     }).catch((e) => console.warn('Failed to sync portfolio:', e.message));
   }, []);
 

@@ -22,6 +22,7 @@ export function useWatchlist() {
               image: row.image || null,
               number: row.number || null,
               setId: row.set_id || null,
+              edition: row.edition || null,
               addedAt: row.created_at
                 ? new Date(row.created_at * 1000).toISOString()
                 : new Date().toISOString(),
@@ -62,6 +63,7 @@ export function useWatchlist() {
         image: entry.image || null,
         number: entry.number || null,
         set_id: entry.setId || null,
+        edition: entry.edition || null,
       }).catch((e) => console.warn('Failed to sync card:', e.message));
     },
     []

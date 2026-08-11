@@ -91,6 +91,10 @@ async function getCardDB() {
   return _cardDB;
 }
 
+// Exposed for callers that need to search across every set (e.g. CSV import
+// matching) rather than one set at a time.
+export const getFullCardDB = getCardDB;
+
 // CDN image paths differ from app set IDs for some sets
 const CDN_PATH_MAP = {
   fossil: 'base3',

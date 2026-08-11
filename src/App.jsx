@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Header from './components/Header';
 import TabNav from './components/TabNav';
 import { useToast } from './components/Toast';
@@ -16,6 +16,20 @@ import Portfolio from './pages/Portfolio';
 import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
 
+const TAB_PATHS = {
+  catalogue: '/',
+  watchlist: '/watchlist',
+  portfolio: '/portfolio',
+  alerts: '/alerts',
+  listings: '/listings',
+  settings: '/settings',
+};
+
+function tabFromPath(pathname) {
+  const entry = Object.entries(TAB_PATHS).find(([, path]) => path === pathname);
+  return entry ? entry[0] : 'catalogue';
+}
+
 export default function App() {
   const toast = useToast();
   const { user, loading: authLoading, logout } = useAuth();
@@ -24,9 +38,25 @@ export default function App() {
   const { portfolio, addItem, removeItem } = usePortfolio();
   const { firedAlerts, fireAlert, clearAlert } = useAlerts();
 
-  const [activeTab, setActiveTab] = useState('catalogue');
+  const [activeTab, setActiveTabState] = useState(() => tabFromPath(window.location.pathname));
   const [listings, setListings] = useState([]);
   const [scanning, setScanning] = useState(false);
+
+  const setActiveTab = useCallback((tab) => {
+    setActiveTabState(tab);
+    const path = TAB_PATHS[tab] || '/';
+    if (window.location.pathname !== path) {
+      window.history.pushState({ tab }, '', path);
+    }
+  }, []);
+
+  useEffect(() => {
+    function onPopState() {
+      setActiveTabState(tabFromPath(window.location.pathname));
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   // Scan a single card for listings
   const scanCard = useCallback(
@@ -157,6 +187,7 @@ export default function App() {
         listingsCount={listings.length}
         user={user}
         onLogout={logout}
+        onLogoClick={() => setActiveTab('catalogue')}
       />
       <main>
         <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
