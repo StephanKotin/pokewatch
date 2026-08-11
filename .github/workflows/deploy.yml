@@ -32,6 +32,15 @@ jobs:
             cd /opt/pokewatch
             git fetch origin master
             git reset --hard origin/master
+            # .env is gitignored and survives `reset --hard`. JWT_SECRET is
+            # required at boot (server.js exits if it's missing) — generate
+            # and persist one here if it's not already set, so a droplet
+            # that never had it set manually can't crash-loop on deploy.
+            # Never overwrites an existing value.
+            if ! grep -q '^JWT_SECRET=.\+' .env 2>/dev/null; then
+              printf '\nJWT_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
+              echo "[deploy] Generated a new JWT_SECRET (none was set)."
+            fi
             npm install
             sudo systemctl restart pokewatch
             sleep 2
