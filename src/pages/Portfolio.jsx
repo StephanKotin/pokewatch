@@ -118,32 +118,88 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
     isGraded: false,
     gradeTier: '',
     gradeLabel: '',
+    cardId: '',
+    setId: '',
+    number: '',
+    image: '',
   });
+
+  // Live card search against PokeTrace (via the server's /api/cards/search
+  // proxy — same route CSV import already uses for unmatched-set rows) so
+  // the manual Add Card form can resolve a real cardId instead of just
+  // free-text name/set. Only searches while no card is selected yet —
+  // picking a result sets form.cardId, which both stops the search and
+  // (see the grade-options effect below) unlocks the Graded toggle for a
+  // brand-new add, not just when editing an already-matched item.
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [nameFocused, setNameFocused] = useState(false);
+
+  useEffect(() => {
+    if (!showModal || form.cardId || form.name.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    let cancelled = false;
+    setSearchLoading(true);
+    const t = setTimeout(() => {
+      searchCards(form.name.trim())
+        .then((res) => {
+          if (!cancelled) setSearchResults((res || []).map(normalizeApiCard).slice(0, 8));
+        })
+        .catch(() => { if (!cancelled) setSearchResults([]); })
+        .finally(() => { if (!cancelled) setSearchLoading(false); });
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [form.name, form.cardId, showModal]);
+
+  const showSearchDropdown = nameFocused && !form.cardId && form.name.trim().length >= 2;
+
+  const selectSearchResult = (card) => {
+    setForm((f) => ({
+      ...f,
+      name: card.name,
+      set: card.setName,
+      setId: card.setSlug,
+      number: card.number,
+      image: card.image,
+      cardId: card.id,
+      // A previously-picked grade almost certainly doesn't apply to a
+      // newly-selected card — clear it rather than carry it forward.
+      isGraded: false,
+      gradeTier: '',
+      gradeLabel: '',
+    }));
+    setSearchResults([]);
+  };
+
+  const clearSelectedCard = () => {
+    setForm((f) => ({ ...f, cardId: '', setId: '', number: '', image: '', isGraded: false, gradeTier: '', gradeLabel: '' }));
+  };
 
   // Graded-tier options are discovered live from PokeTrace per card (see
   // fetchCardGrades) rather than guessed, since PokeTrace doesn't publish a
-  // fixed tier-string list. Only fetchable once a real cardId is known,
-  // which the plain "Add Card" form here never has (no card search) — it's
-  // only ever available when editing an item that was matched via Catalogue
-  // or CSV import.
+  // fixed tier-string list. Only fetchable once a real cardId is known —
+  // either from editing an item already matched via Catalogue/CSV import,
+  // or from picking a result out of the search above on a brand-new add.
   const [gradeOptions, setGradeOptions] = useState([]);
   const [gradeOptionsLoading, setGradeOptionsLoading] = useState(false);
 
   useEffect(() => {
-    if (!showModal || !form.isGraded || !editItem?.cardId) {
+    if (!showModal || !form.isGraded || !form.cardId) {
       setGradeOptions([]);
       return;
     }
     let cancelled = false;
     setGradeOptionsLoading(true);
-    fetchCardGrades(editItem.cardId)
+    fetchCardGrades(form.cardId)
       .then((res) => {
         if (!cancelled) setGradeOptions(sortGradeOptions(res?.gradedOptions));
       })
       .catch(() => { if (!cancelled) setGradeOptions([]); })
       .finally(() => { if (!cancelled) setGradeOptionsLoading(false); });
     return () => { cancelled = true; };
-  }, [showModal, form.isGraded, editItem?.cardId]);
+  }, [showModal, form.isGraded, form.cardId]);
 
   /* ---- CSV import ---- */
   const fileInputRef = useRef(null);
@@ -336,6 +392,7 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
     setForm({
       name: '', set: '', condition: 'Near Mint', purchasePrice: '', purchaseDate: '', notes: '',
       isGraded: false, gradeTier: '', gradeLabel: '',
+      cardId: '', setId: '', number: '', image: '',
     });
     setShowModal(true);
   };
@@ -352,6 +409,10 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
       isGraded: !!item.isGraded,
       gradeTier: item.gradeTier || '',
       gradeLabel: item.gradeLabel || '',
+      cardId: item.cardId || '',
+      setId: item.setId || '',
+      number: item.number || '',
+      image: item.image || '',
     });
     setShowModal(true);
   };
@@ -411,6 +472,10 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
       id: editItem?.id || Date.now().toString(),
       name: form.name,
       set: form.set,
+      cardId: form.cardId || null,
+      setId: form.setId || null,
+      number: form.number || null,
+      image: form.image || null,
       condition: form.isGraded ? null : form.condition,
       isGraded: form.isGraded,
       gradeTier: form.isGraded ? form.gradeTier || null : null,
@@ -629,25 +694,82 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
         <div className="add-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="add-modal" onClick={(e) => e.stopPropagation()}>
             <h4>{editItem ? 'Edit Card' : 'Add Card to Portfolio'}</h4>
-            <div className="form-group">
+            <div className="form-group port-name-search-wrap">
               <label>Card Name</label>
               <input
                 type="text"
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Charizard VMAX"
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setForm((f) =>
+                    f.cardId
+                      ? { ...f, name: value, cardId: '', setId: '', number: '', image: '', isGraded: false, gradeTier: '', gradeLabel: '' }
+                      : { ...f, name: value }
+                  );
+                }}
+                onFocus={() => setNameFocused(true)}
+                onBlur={() => setNameFocused(false)}
+                placeholder="Search for a card…"
+                autoComplete="off"
               />
+              {showSearchDropdown && (
+                <div className="port-search-results">
+                  {searchLoading ? (
+                    <div className="port-search-hint">Searching…</div>
+                  ) : searchResults.length ? (
+                    searchResults.map((c) => (
+                      <div key={c.id} className="port-search-result" onMouseDown={() => selectSearchResult(c)}>
+                        {c.image ? (
+                          <img src={c.image} alt="" className="port-search-result-img" />
+                        ) : (
+                          <div className="port-search-result-img port-search-result-img-placeholder">?</div>
+                        )}
+                        <div className="port-search-result-info">
+                          <div className="port-search-result-name">{c.name}</div>
+                          <div className="port-search-result-meta">
+                            {[c.setName, c.number && `#${c.number}`].filter(Boolean).join(' · ')}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="port-search-hint">No matches — you can still add this as free text.</div>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="form-group">
-              <label>Set</label>
-              <input
-                type="text"
-                value={form.set}
-                onChange={(e) => setForm({ ...form, set: e.target.value })}
-                placeholder="e.g. Evolving Skies"
-              />
-            </div>
-            {editItem?.cardId && (
+            {form.cardId ? (
+              <div className="form-group">
+                <label>Selected Card</label>
+                <div className="port-selected-card">
+                  {form.image ? (
+                    <img src={form.image} alt="" className="port-search-result-img" />
+                  ) : (
+                    <div className="port-search-result-img port-search-result-img-placeholder">?</div>
+                  )}
+                  <div className="port-search-result-info">
+                    <div className="port-search-result-name">{form.name}</div>
+                    <div className="port-search-result-meta">
+                      {[form.set, form.number && `#${form.number}`].filter(Boolean).join(' · ')}
+                    </div>
+                  </div>
+                  <button type="button" className="port-selected-card-clear" onClick={clearSelectedCard} title="Clear selection">
+                    &times;
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="form-group">
+                <label>Set</label>
+                <input
+                  type="text"
+                  value={form.set}
+                  onChange={(e) => setForm({ ...form, set: e.target.value })}
+                  placeholder="e.g. Evolving Skies"
+                />
+              </div>
+            )}
+            {form.cardId && (
               <div className="add-mode-tabs">
                 <button
                   type="button"
