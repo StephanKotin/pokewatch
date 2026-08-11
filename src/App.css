@@ -181,15 +181,19 @@ select option { background: var(--surface2); }
 .cat-set-count { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--blue); }
 
 /* ======== CARD MODAL ======== */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); backdrop-filter: blur(8px); z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px 48px; overflow-y: auto; animation: fadeIn .2s ease; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); backdrop-filter: blur(8px); z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding: 96px 16px 48px; overflow-y: auto; animation: fadeIn .2s ease; }
 @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 1100px; overflow: hidden; animation: modalIn .25s ease; position: relative; flex-shrink: 0; }
 @keyframes modalIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-.modal-header { padding: 22px 28px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 18px; position: sticky; top: 0; background: var(--surface); z-index: 10; }
+/* Header + toolbar stay pinned together as one unit while the card grid
+   below scrolls — sticky lives on the wrapper (not each child) so both
+   move as a single block regardless of the header's own height. */
+.modal-sticky-top { position: sticky; top: 0; z-index: 10; background: var(--surface); }
+.modal-header { padding: 22px 28px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 18px; }
 .modal-set-logo { width: 80px; height: 52px; object-fit: contain; flex-shrink: 0; }
 .modal-set-name { font-family: 'Bangers', cursive; font-size: 26px; letter-spacing: 1px; }
 .modal-set-sub { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); margin-top: 3px; }
-.modal-close { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; }
+.modal-close { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; border: 1px solid #fff; background: none; color: var(--muted); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; }
 .modal-close:hover { border-color: var(--red); color: var(--red); }
 .modal-toolbar { padding: 12px 28px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: rgba(0,0,0,.15); }
 .modal-search-wrap { position: relative; }

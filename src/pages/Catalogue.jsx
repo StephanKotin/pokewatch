@@ -371,54 +371,56 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
       {modalSet && (
         <div className="modal-overlay" onClick={() => setModalSet(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              {modalSet.logo && (
-                <img
-                  className="modal-set-logo"
-                  src={modalSet.logo}
-                  alt=""
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextSibling && (e.target.nextSibling.style.display = 'flex');
-                  }}
-                />
-              )}
-              <div
-                className="cat-set-logo-placeholder"
-                style={modalSet.logo ? { display: 'none' } : undefined}
-              >
-                {modalSet.name.slice(0, 2).toUpperCase()}
-              </div>
-              <div>
-                <h3 className="modal-set-name">{modalSet.name}</h3>
-                <p className="modal-set-sub">
-                  {modalSet.releaseDate && <>{modalSet.releaseDate} &middot; </>}
-                  {modalSet.cardCount} cards
-                </p>
-              </div>
-              <button className="modal-close" onClick={() => setModalSet(null)}>
-                &times;
-              </button>
-            </div>
-
-            <div className="modal-toolbar">
-              <div className="modal-search-wrap">
-                <input
-                  type="text"
-                  placeholder="Search cards..."
-                  value={modalSearch}
-                  onChange={(e) => setModalSearch(e.target.value)}
-                />
-              </div>
-              {RARITY_FILTERS.map((rf) => (
-                <button
-                  key={rf.key}
-                  className={`modal-filter-btn${rarityFilter === rf.key ? ' active' : ''}`}
-                  onClick={() => setRarityFilter(rf.key)}
+            <div className="modal-sticky-top">
+              <div className="modal-header">
+                {modalSet.logo && (
+                  <img
+                    className="modal-set-logo"
+                    src={modalSet.logo}
+                    alt=""
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling && (e.target.nextSibling.style.display = 'flex');
+                    }}
+                  />
+                )}
+                <div
+                  className="cat-set-logo-placeholder"
+                  style={modalSet.logo ? { display: 'none' } : undefined}
                 >
-                  {rf.label}
+                  {modalSet.name.slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="modal-set-name">{modalSet.name}</h3>
+                  <p className="modal-set-sub">
+                    {modalSet.releaseDate && <>{modalSet.releaseDate} &middot; </>}
+                    {modalSet.cardCount} cards
+                  </p>
+                </div>
+                <button className="modal-close" onClick={() => setModalSet(null)}>
+                  &times;
                 </button>
-              ))}
+              </div>
+
+              <div className="modal-toolbar">
+                <div className="modal-search-wrap">
+                  <input
+                    type="text"
+                    placeholder="Search cards..."
+                    value={modalSearch}
+                    onChange={(e) => setModalSearch(e.target.value)}
+                  />
+                </div>
+                {RARITY_FILTERS.map((rf) => (
+                  <button
+                    key={rf.key}
+                    className={`modal-filter-btn${rarityFilter === rf.key ? ' active' : ''}`}
+                    onClick={() => setRarityFilter(rf.key)}
+                  >
+                    {rf.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="modal-body">
