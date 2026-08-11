@@ -238,6 +238,7 @@ export default function App() {
             priceData={portfolioPriceData}
             pricesLoading={portfolioPricesLoading}
             toast={toast}
+            onGoToCatalogue={() => setActiveTab('catalogue')}
           />
         )}
         {activeTab === 'alerts' && (

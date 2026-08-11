@@ -94,7 +94,7 @@ function buildChartData(portfolio, priceData) {
   return points;
 }
 
-export default function Portfolio({ portfolio, addItem, removeItem, priceData, pricesLoading, toast }) {
+export default function Portfolio({ portfolio, addItem, removeItem, priceData, pricesLoading, toast, onGoToCatalogue }) {
   const [editItem, setEditItem] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
@@ -727,6 +727,9 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
                 </div>
               )}
             </div>
+            <button type="button" className="btn btn-secondary port-catalogue-search-btn" onClick={onGoToCatalogue}>
+              Search by Catalogue
+            </button>
             {form.cardId ? (
               <div className="form-group">
                 <label>Selected Card</label>
@@ -827,15 +830,6 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
                 type="date"
                 value={form.purchaseDate}
                 onChange={(e) => setForm({ ...form, purchaseDate: e.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label>Notes</label>
-              <textarea
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Optional notes..."
-                rows={2}
               />
             </div>
             <div className="add-modal-actions">
