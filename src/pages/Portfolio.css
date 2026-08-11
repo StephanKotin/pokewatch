@@ -353,6 +353,10 @@
   margin-top: 0.2rem;
 }
 
+.port-card-trend {
+  padding: 0.3rem 0.65rem 0;
+}
+
 .port-card-stats {
   display: grid;
   grid-template-columns: 1fr 1fr;

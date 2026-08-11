@@ -122,16 +122,9 @@
   font-weight: 600;
 }
 
-.wl-chart-placeholder {
+.wl-chart {
   margin: 6px 12px;
-  height: 60px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px dashed var(--border);
-  border-radius: 6px;
-  color: var(--muted);
-  font-size: 12px;
+  padding: 6px 8px;
 }
 
 .wl-remove-btn {
@@ -207,9 +200,8 @@
 }
 
 .wl-list-chart {
-  color: var(--muted);
-  font-size: 13px;
-  text-align: center;
+  display: flex;
+  align-items: center;
 }
 
 .wl-list-row .wl-remove-btn {

@@ -13,6 +13,58 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const POKETRACE_API_KEY = process.env.POKETRACE_API_KEY;
 const POKETRACE_BASE = 'https://api.poketrace.com/v1';
+
+// PokeTrace enforces a burst rate limit well below the daily quota (confirmed
+// by hand: firing ~40 requests at once gets most of them 429'd with "Too many
+// requests. Slow down."). A page with a large portfolio/watchlist fans out
+// one request per card, so every outbound call is funneled through this
+// queue instead of firing all at once. Concurrency alone isn't enough — a
+// handful of in-flight requests can still add up to a high *rate* if each
+// one resolves quickly — so dispatch is also spaced out with a minimum
+// interval, on top of a couple of backoff retries for any 429s that still
+// slip through under contention.
+const POKETRACE_MAX_CONCURRENT = 3;
+const POKETRACE_MIN_DISPATCH_INTERVAL_MS = 150;
+let pokeTraceActive = 0;
+let pokeTraceLastDispatch = 0;
+const pokeTraceQueue = [];
+
+function pokeTraceDrain() {
+  if (!pokeTraceQueue.length || pokeTraceActive >= POKETRACE_MAX_CONCURRENT) return;
+  const wait = pokeTraceLastDispatch + POKETRACE_MIN_DISPATCH_INTERVAL_MS - Date.now();
+  if (wait > 0) {
+    setTimeout(pokeTraceDrain, wait);
+    return;
+  }
+  pokeTraceLastDispatch = Date.now();
+  pokeTraceQueue.shift()();
+  pokeTraceDrain();
+}
+
+function pokeTraceFetch(url, attempt = 1) {
+  return new Promise((resolve, reject) => {
+    const run = async () => {
+      pokeTraceActive++;
+      try {
+        const response = await fetch(url, { headers: { 'X-API-Key': POKETRACE_API_KEY } });
+        if (response.status === 429 && attempt < 4) {
+          await sleep(600 * attempt);
+          resolve(pokeTraceFetch(url, attempt + 1));
+          return;
+        }
+        resolve(response);
+      } catch (e) {
+        reject(e);
+      } finally {
+        pokeTraceActive--;
+        pokeTraceDrain();
+      }
+    };
+    pokeTraceQueue.push(run);
+    pokeTraceDrain();
+  });
+}
+
 const POKEMONTCGIO_API_KEY = process.env.POKEMONTCGIO_API_KEY;
 const POKEMONTCGIO_BASE = 'https://api.pokemontcg.io/v2';
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
@@ -121,24 +173,26 @@ function findBestSetMatch(results, wantedSet) {
   return partial || results[0] || null;
 }
 
-async function lookupCardPrices(name, set, realCardId, edition) {
-  let card = null;
+// pokemontcg.io has no concept of print edition (checked — the source data
+// has exactly one entry per card, 1st Edition or not), so this is the only
+// place "1st Edition" can factor in: as extra search text against
+// PokeTrace's real eBay comps.
+async function resolvePokeTraceCard(name, set, edition) {
   try {
-    // pokemontcg.io has no concept of print edition (checked — the source
-    // data has exactly one entry per card, 1st Edition or not), so this is
-    // the only place "1st Edition" can factor in: as extra search text
-    // against PokeTrace's real eBay comps.
     const searchName = edition && edition !== 'Unlimited' ? `${name} ${edition}` : name;
     const params = new URLSearchParams({ search: searchName, market: 'US', limit: '20' });
-    const response = await fetch(`${POKETRACE_BASE}/cards?${params}`, {
-      headers: { 'X-API-Key': POKETRACE_API_KEY }
-    });
+    const response = await pokeTraceFetch(`${POKETRACE_BASE}/cards?${params}`);
     const data = await response.json();
     const results = data.data || [];
-    card = set ? findBestSetMatch(results, set) : (results[0] || null);
+    return set ? findBestSetMatch(results, set) : (results[0] || null);
   } catch (e) {
-    console.warn('[prices] PokeTrace lookup failed:', e.message);
+    console.warn('[poketrace] card resolution failed:', e.message);
+    return null;
   }
+}
+
+async function lookupCardPrices(name, set, realCardId, edition) {
+  let card = await resolvePokeTraceCard(name, set, edition);
 
   const hasNearMint = (card?.prices?.ebay?.NEAR_MINT?.avg) || (card?.prices?.tcgplayer?.NEAR_MINT?.avg);
   let fallbackSource = null;
@@ -411,33 +465,6 @@ app.put('/api/settings', authenticate, (req, res) => {
 
 // --- Public Routes (shared data, no auth needed) ---
 
-const PRICE_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60; // "once per day" per card
-
-// Returns the most recent snapshot per grade for a card, but only the ones
-// still within the cache window — so a card with only a week-old Near Mint
-// snapshot counts as stale, not "partially fresh".
-function getFreshSnapshot(snapshotId, maxAgeSeconds) {
-  const cutoff = Math.floor(Date.now() / 1000) - maxAgeSeconds;
-  const rows = db
-    .prepare(
-      `SELECT grade, price, low, high, MAX(captured_at) AS captured_at
-       FROM price_snapshots
-       WHERE card_id = ? AND captured_at >= ?
-       GROUP BY grade`
-    )
-    .all(snapshotId, cutoff);
-  return rows.length ? rows : null;
-}
-
-function cardFromSnapshotRows(id, name, rows) {
-  const prices = {};
-  for (const row of rows) {
-    const field = PRICE_CONDITIONS[row.grade];
-    if (field) prices[field] = { avg: row.price, low: row.low, high: row.high };
-  }
-  return { id, name, prices: { tcgplayer: prices } };
-}
-
 app.get('/api/prices', async (req, res) => {
   const { name, set, cardId, edition } = req.query;
   if (!name) return res.status(400).json({ error: 'name required' });
@@ -446,11 +473,6 @@ app.get('/api/prices', async (req, res) => {
     // collectibles with very different prices — keep their snapshots apart.
     const editionSuffix = edition && edition !== 'Unlimited' ? '-1st' : '';
     const snapshotId = (cardId || name).toLowerCase() + editionSuffix;
-
-    const cached = getFreshSnapshot(snapshotId, PRICE_CACHE_MAX_AGE_SECONDS);
-    if (cached) {
-      return res.json({ data: [cardFromSnapshotRows(cardId || null, name, cached)] });
-    }
 
     const { card, fallbackSource } = await lookupCardPrices(name, set, cardId, edition);
     if (card && card.prices) {
@@ -470,6 +492,52 @@ app.get('/api/prices', async (req, res) => {
   }
 });
 
+// PokeTrace's own price-history endpoint has real, server-side history per
+// grading tier (up to a year) — far deeper than our local price_snapshots,
+// which only cover cards from whenever polling started. Cached in-memory for
+// a few hours (matching the cron's cadence) so repeat page loads don't
+// re-spend quota re-fetching a card's history that hasn't changed yet.
+const PRICE_HISTORY_PERIOD = '90d';
+const PRICE_HISTORY_CACHE_MAX_AGE_SECONDS = 6 * 60 * 60;
+const priceHistoryCache = new Map(); // `${cardId}|${tier}` -> { data, cachedAt }
+
+app.get('/api/price-history', async (req, res) => {
+  const { name, set, edition, grade } = req.query;
+  if (!name) return res.status(400).json({ error: 'name required' });
+  const gradeKey = PRICE_CONDITIONS[grade] ? grade : 'nm';
+  const tier = PRICE_CONDITIONS[gradeKey];
+  try {
+    const card = await resolvePokeTraceCard(name, set, edition);
+    if (!card) return res.json([]);
+
+    const cacheKey = `${card.id}|${tier}`;
+    const cached = priceHistoryCache.get(cacheKey);
+    if (cached && (Date.now() - cached.cachedAt) / 1000 < PRICE_HISTORY_CACHE_MAX_AGE_SECONDS) {
+      return res.json(cached.data);
+    }
+
+    const params = new URLSearchParams({ period: PRICE_HISTORY_PERIOD, limit: '100' });
+    const response = await pokeTraceFetch(`${POKETRACE_BASE}/cards/${card.id}/prices/${tier}/history?${params}`);
+    if (!response.ok) return res.json([]);
+    const { data: rows } = await response.json();
+    const mapped = (rows || [])
+      .map((r) => ({
+        grade: gradeKey,
+        price: r.avg,
+        low: r.low,
+        high: r.high,
+        captured_at: Math.floor(new Date(r.date).getTime() / 1000),
+      }))
+      .sort((a, b) => a.captured_at - b.captured_at);
+
+    priceHistoryCache.set(cacheKey, { data: mapped, cachedAt: Date.now() });
+    res.json(mapped);
+  } catch (e) {
+    console.warn('[price-history] lookup failed:', e.message);
+    res.json([]);
+  }
+});
+
 app.get('/api/listings', async (req, res) => {
   const { name, set, condition, maxPrice } = req.query;
   if (!name) return res.status(400).json({ error: 'name required' });
@@ -485,11 +553,6 @@ app.get('/api/listings', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
-
-app.get('/api/history/:cardId', (req, res) => {
-  const rows = db.prepare('SELECT grade, price, low, high, source, captured_at FROM price_snapshots WHERE card_id = ? ORDER BY captured_at ASC').all(req.params.cardId.toLowerCase());
-  res.json(rows);
 });
 
 // --- Protected Routes (user-scoped) ---

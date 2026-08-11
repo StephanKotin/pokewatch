@@ -103,7 +103,7 @@ export default function App() {
 
       // Fire price alert
       if (card.maxPrice) {
-        const matching = results.filter((r) => r.price <= card.maxPrice * 100);
+        const matching = results.filter((r) => r.price <= card.maxPrice);
         if (matching.length > 0) {
           const cheapest = matching.reduce((a, b) => (a.price < b.price ? a : b));
           fireAlert(card, cheapest, {

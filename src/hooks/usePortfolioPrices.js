@@ -1,16 +1,9 @@
 import { useState, useEffect } from 'react';
 import { apiGet } from '../api/poketrace';
+import { CONDITION_TO_GRADE } from '../data/grades';
 
-function priceKeyFor(item) {
-  const base = (item.cardId || item.name || '').toLowerCase();
-  if (!base) return '';
-  // Matches the server's snapshot keying: 1st Edition copies of a card are
-  // priced and stored separately from Unlimited copies of the same card_id.
-  return item.edition && item.edition !== 'Unlimited' ? `${base}-1st` : base;
-}
-
-// Fetches live quotes + stored price history for each portfolio holding,
-// keyed by the same card_id the server uses for price_snapshots.
+// Fetches live quotes + PokeTrace's real price history for each portfolio
+// holding, keyed by the item's own grading tier (raw condition -> short key).
 export function usePortfolioPrices(portfolio) {
   const [priceData, setPriceData] = useState({});
   const [loading, setLoading] = useState(false);
@@ -24,31 +17,37 @@ export function usePortfolioPrices(portfolio) {
     }
 
     setLoading(true);
-    async function loadAll() {
-      const entries = await Promise.all(
-        portfolio.map(async (item) => {
-          const key = priceKeyFor(item);
-          if (!key) return [item.id, { history: [], live: null }];
+    // Each card's fetch commits to state as soon as it resolves, rather than
+    // waiting on Promise.all for the whole portfolio — with a few hundred
+    // cards funneled through the server's PokeTrace rate limiter, that batch
+    // can take a minute or more, and an all-or-nothing update makes the page
+    // look empty/broken the entire time instead of filling in progressively.
+    async function loadOne(item) {
+      if (!item.name) return;
 
-          const params = new URLSearchParams({ name: item.name });
-          if (item.set) params.set('set', item.set);
-          if (item.cardId) params.set('cardId', item.cardId);
-          if (item.edition) params.set('edition', item.edition);
+      const params = new URLSearchParams({ name: item.name });
+      if (item.set) params.set('set', item.set);
+      if (item.cardId) params.set('cardId', item.cardId);
+      if (item.edition) params.set('edition', item.edition);
 
-          const [history, live] = await Promise.all([
-            apiGet(`/api/history/${encodeURIComponent(key)}`).catch(() => []),
-            apiGet(`/api/prices?${params}`).catch(() => null),
-          ]);
-          const card = (live?.data || [])[0] || null;
-          return [item.id, { history: history || [], live: card }];
-        })
-      );
+      const gradeKey = CONDITION_TO_GRADE[item.condition] || 'nm';
+      const historyParams = new URLSearchParams({ name: item.name, grade: gradeKey });
+      if (item.set) historyParams.set('set', item.set);
+      if (item.edition) historyParams.set('edition', item.edition);
+
+      const [history, live] = await Promise.all([
+        apiGet(`/api/price-history?${historyParams}`).catch(() => []),
+        apiGet(`/api/prices?${params}`).catch(() => null),
+      ]);
+      const card = (live?.data || [])[0] || null;
       if (!cancelled) {
-        setPriceData(Object.fromEntries(entries));
-        setLoading(false);
+        setPriceData((prev) => ({ ...prev, [item.id]: { history: history || [], live: card } }));
       }
     }
-    loadAll();
+
+    Promise.all(portfolio.map(loadOne)).then(() => {
+      if (!cancelled) setLoading(false);
+    });
 
     return () => {
       cancelled = true;

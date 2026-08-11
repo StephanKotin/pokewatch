@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
+import { useWatchlistPrices } from '../hooks/useWatchlistPrices';
+import { CONDITION_TO_GRADE } from '../data/grades';
+import Sparkline from '../components/Sparkline';
 import './Watchlist.css';
 
 export default function Watchlist({ watchlist, removeCard, toast }) {
   const [viewMode, setViewMode] = useState('grid');
+  const { priceData } = useWatchlistPrices(watchlist);
 
   const getCardImage = (card) => {
     if (card.image) return card.image;
@@ -72,7 +76,12 @@ export default function Watchlist({ watchlist, removeCard, toast }) {
                     )}
                   </div>
                 </div>
-                <div className="wl-chart-placeholder">Price chart coming soon</div>
+                <div className="wl-chart">
+                  <Sparkline
+                    history={priceData[card.id]?.history}
+                    gradeKey={CONDITION_TO_GRADE[card.condition] || 'nm'}
+                  />
+                </div>
                 <button
                   className="wl-remove-btn"
                   onClick={() => removeCard(card.id)}
@@ -103,7 +112,13 @@ export default function Watchlist({ watchlist, removeCard, toast }) {
                   {card.condition && card.condition !== 'Any' ? card.condition : '—'}
                   {card.edition === '1st Edition' && ' · 1st Ed'}
                 </div>
-                <div className="wl-list-chart">—</div>
+                <div className="wl-list-chart">
+                  <Sparkline
+                    history={priceData[card.id]?.history}
+                    gradeKey={CONDITION_TO_GRADE[card.condition] || 'nm'}
+                    compact
+                  />
+                </div>
                 <button
                   className="wl-remove-btn"
                   onClick={() => removeCard(card.id)}

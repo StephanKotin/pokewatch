@@ -3,6 +3,7 @@ import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 import { GRADES, CONDITION_TO_GRADE, CONDITIONS } from '../data/grades';
 import { extractGradePrice, TCG_CDN, getFullCardDB } from '../api/poketrace';
 import { usePortfolioPrices } from '../hooks/usePortfolioPrices';
+import Sparkline from '../components/Sparkline';
 import {
   rowsFromCSV,
   matchCard,
@@ -494,6 +495,13 @@ export default function Portfolio({ portfolio, addItem, removeItem, toast }) {
                       {card.edition === '1st Edition' && <span className="tag tag-edition">1st Ed</span>}
                     </div>
                   </div>
+                </div>
+
+                <div className="port-card-trend">
+                  <Sparkline
+                    history={priceData[card.id]?.history}
+                    gradeKey={CONDITION_TO_GRADE[card.condition] || 'nm'}
+                  />
                 </div>
 
                 <div className="port-card-stats">
