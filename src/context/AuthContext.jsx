@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { identifyUser, resetAnalytics } from '../analytics';
 
 const TOKEN_KEY = 'pokewatch-token';
 const AuthContext = createContext();
@@ -10,6 +11,11 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) identifyUser(user);
+    else resetAnalytics();
+  }, [user]);
 
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);

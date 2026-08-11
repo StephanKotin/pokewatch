@@ -8,6 +8,7 @@ import { useWatchlist } from './hooks/useWatchlist';
 import { usePortfolio } from './hooks/usePortfolio';
 import { useAlerts } from './hooks/useAlerts';
 import { searchListingsAPI } from './api/poketrace';
+import { trackPageview } from './analytics';
 import Login from './pages/Login';
 import Watchlist from './pages/Watchlist';
 import Listings from './pages/Listings';
@@ -57,6 +58,13 @@ export default function App() {
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
+
+  // Covers both tab clicks and browser back/forward, since both update
+  // activeTab — matches the app's SPA navigation instead of relying on
+  // PostHog's default full-page-load pageview capture.
+  useEffect(() => {
+    if (!authLoading && user) trackPageview(activeTab);
+  }, [activeTab, authLoading, user]);
 
   // Scan a single card for listings
   const scanCard = useCallback(
