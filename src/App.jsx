@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import Header from './components/Header';
+import WelcomeSplash from './components/WelcomeSplash';
 import { useToast } from './components/Toast';
 import { useAuth } from './context/AuthContext';
 import { useSettings } from './hooks/useSettings';
@@ -33,7 +34,7 @@ function tabFromPath(pathname) {
 
 export default function App() {
   const toast = useToast();
-  const { user, loading: authLoading, logout } = useAuth();
+  const { user, loading: authLoading, logout, markOnboarded } = useAuth();
   const { settings, updateSettings } = useSettings();
   const { watchlist, addCard, removeCard, updateCard, loading } = useWatchlist();
   const { portfolio, addItem, removeItem } = usePortfolio();
@@ -195,6 +196,7 @@ export default function App() {
 
   return (
     <>
+      {!user.hasOnboarded && <WelcomeSplash onDismiss={markOnboarded} />}
       <Header
         activeTab={activeTab}
         onTabChange={setActiveTab}

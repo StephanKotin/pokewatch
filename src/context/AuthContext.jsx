@@ -62,8 +62,22 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  // Persisted server-side (not localStorage) so the one-time welcome splash
+  // stays dismissed across devices/browsers, not just the one it was seen
+  // on. Updates local state optimistically so the splash closes immediately
+  // rather than waiting on the request.
+  const markOnboarded = useCallback(() => {
+    setUser((u) => (u ? { ...u, hasOnboarded: true } : u));
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) return;
+    fetch('/api/auth/onboarded', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, markOnboarded }}>
       {children}
     </AuthContext.Provider>
   );

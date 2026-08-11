@@ -431,6 +431,16 @@ try { db.exec("ALTER TABLE alerts ADD COLUMN user_id TEXT"); } catch(e) {}
 // 'approved' so nobody already using the app gets locked out retroactively.
 try { db.exec("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'"); } catch(e) {}
 try { db.exec("ALTER TABLE users ADD COLUMN approval_token TEXT"); } catch(e) {}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN has_onboarded INTEGER DEFAULT 0");
+  // This ALTER only succeeds the one time it actually adds the column (a
+  // restart after that hits the catch below, since it already exists) — so
+  // backfilling every current row as already-onboarded here only affects
+  // the pre-existing user base at migration time, never a genuinely new
+  // registration afterward. Without this, every existing user would also
+  // see the "new user" welcome splash once, not just new signups.
+  db.exec("UPDATE users SET has_onboarded = 1");
+} catch(e) {}
 
 // Auth middleware
 function authenticate(req, res, next) {
@@ -511,14 +521,23 @@ app.post('/api/auth/login', async (req, res) => {
   if (user.status === 'rejected') return res.status(403).json({ error: 'This account request was declined' });
 
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ token, user: { id: user.id, email: user.email } });
+  res.json({ token, user: { id: user.id, email: user.email, hasOnboarded: !!user.has_onboarded } });
 });
 
 app.get('/api/auth/me', authenticate, (req, res) => {
-  const user = db.prepare('SELECT id, email, status FROM users WHERE id = ?').get(req.userId);
+  const user = db.prepare('SELECT id, email, status, has_onboarded FROM users WHERE id = ?').get(req.userId);
   if (!user) return res.status(401).json({ error: 'User not found' });
   if (user.status !== 'approved') return res.status(403).json({ error: 'Account not approved' });
-  res.json({ user });
+  res.json({ user: { id: user.id, email: user.email, status: user.status, hasOnboarded: !!user.has_onboarded } });
+});
+
+// Marks the one-time welcome splash as seen so it doesn't show again on
+// this or any other device — tied to the account rather than localStorage
+// so it survives a browser switch/clear, and so it stays reliably "once"
+// per the ask, not "once per browser."
+app.post('/api/auth/onboarded', authenticate, (req, res) => {
+  db.prepare('UPDATE users SET has_onboarded = 1 WHERE id = ?').run(req.userId);
+  res.json({ ok: true });
 });
 
 // --- Admin approval links (opened directly from the notification email) ---

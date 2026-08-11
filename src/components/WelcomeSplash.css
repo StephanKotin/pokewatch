@@ -1,0 +1,114 @@
+/* fadeIn / modalIn keyframes are already defined globally in App.css */
+
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+  animation: fadeIn 0.2s ease;
+}
+
+.welcome-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px;
+  width: 100%;
+  max-width: 460px;
+  position: relative;
+  overflow: hidden;
+  animation: modalIn 0.25s ease;
+  text-align: center;
+}
+
+.welcome-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--yellow), var(--red), var(--blue));
+}
+
+.welcome-logo {
+  font-family: 'Bangers', cursive;
+  font-size: 32px;
+  letter-spacing: 1px;
+  color: var(--yellow);
+  text-shadow: 2px 2px 0 rgba(249, 225, 0, 0.2);
+}
+
+.welcome-logo span {
+  color: var(--text);
+}
+
+.welcome-title {
+  font-family: 'Bangers', cursive;
+  font-size: 24px;
+  letter-spacing: 1px;
+  color: var(--text);
+  margin: 10px 0 2px;
+}
+
+.welcome-sub {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--muted);
+  margin-bottom: 26px;
+}
+
+.welcome-features {
+  list-style: none;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 30px;
+  padding: 0;
+}
+
+.welcome-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.welcome-features strong {
+  color: var(--yellow);
+}
+
+.welcome-feature-icon {
+  font-size: 17px;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.welcome-cta {
+  width: 100%;
+  padding: 12px 0;
+  font-size: 14px;
+}
+
+@media (max-width: 520px) {
+  .welcome-card {
+    padding: 28px 20px;
+  }
+}
