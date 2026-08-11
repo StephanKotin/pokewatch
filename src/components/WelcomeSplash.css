@@ -76,29 +76,38 @@
 }
 
 .welcome-features li {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
   font-size: 13.5px;
   line-height: 1.5;
   color: var(--text);
+  padding-left: 16px;
+  position: relative;
+}
+
+.welcome-features li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--yellow);
 }
 
 .welcome-features strong {
   color: var(--yellow);
 }
 
-.welcome-feature-icon {
-  font-size: 17px;
-  flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.welcome-coming-soon {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(255, 159, 28, 0.16);
+  color: #ff9f1c;
+  margin-left: 6px;
 }
 
 .welcome-cta {
