@@ -902,6 +902,31 @@ function wotcPair(slug, extraDropSlugs = []) {
   };
 }
 
+// PokeTrace stores exactly one scan per card and reuses it for both the
+// Unlimited and 1st Edition listings (confirmed live: identical image URLs
+// across every Jungle and Neo Genesis card checked), so its "Unlimited"
+// entries were silently showing 1st-Edition-stamped photos. This dataset —
+// scraped from Pokellector, which does host genuine unstamped scans — is a
+// server-only enrichment source overriding just the "unlimited" bucket's
+// image for these 10 sets, the same category as the pokemontcg.io
+// releaseDate/series/logo enrichment above, not a second card catalogue.
+const WOTC_UNLIMITED_IMAGES = require('./data/wotc-unlimited-images.json');
+
+// PokeTrace numbers cards "001/102"; Pokellector (the scrape source) uses
+// bare "1" — normalize both sides to compare.
+function normalizeWotcCardNumber(raw) {
+  return String(raw || '').split('/')[0].trim().replace(/^0+(?=\d)/, '');
+}
+
+const wotcUnlimitedImageMap = new Map(
+  WOTC_UNLIMITED_IMAGES.map((r) => [`${r.set}|${normalizeWotcCardNumber(r.cardNumber)}`, r.image])
+);
+
+function withUnlimitedImageOverride(card, setName) {
+  const override = wotcUnlimitedImageMap.get(`${setName}|${normalizeWotcCardNumber(card.cardNumber)}`);
+  return override ? { ...card, image: override } : card;
+}
+
 const WOTC_SET_EDITIONS = {
   'Base Set': {
     dropSlugs: ['base-set', 'base-set-shadowless'],
@@ -1029,14 +1054,16 @@ app.get('/api/sets/:slug/cards', async (req, res) => {
     const composite = parseCompositeSlug(slug);
     if (!composite) return res.json(await getCardsForRealSlug(slug));
 
-    const config = Object.values(WOTC_SET_EDITIONS).find((c) =>
+    const entry = Object.entries(WOTC_SET_EDITIONS).find(([, c]) =>
       c.editions.some((e) => e.slug === composite.realSlug && e.key === composite.editionKey)
     );
+    const [setName, config] = entry || [];
     const edition = config?.editions.find((e) => e.slug === composite.realSlug && e.key === composite.editionKey);
     if (!edition) return res.status(404).json({ error: 'unknown edition slug' });
 
     const cards = await getCardsForRealSlug(composite.realSlug);
-    res.json(cards.filter((c) => edition.variantMatch(c.variant)));
+    const filtered = cards.filter((c) => edition.variantMatch(c.variant));
+    res.json(edition.key === 'unlimited' ? filtered.map((c) => withUnlimitedImageOverride(c, setName)) : filtered);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1056,7 +1083,13 @@ app.get('/api/cards/search', async (req, res) => {
     const filtered = number
       ? (data || []).filter((c) => (c.cardNumber || '').split('/')[0].replace(/^0+(?=\d)/, '') === number.split('/')[0].replace(/^0+(?=\d)/, ''))
       : (data || []);
-    res.json(dedupeCards(filtered));
+    const deduped = dedupeCards(filtered);
+    res.json(deduped.map((c) => {
+      const config = WOTC_SET_EDITIONS[c.set?.name];
+      const unlimitedEdition = config?.editions.find((e) => e.key === 'unlimited');
+      const isUnlimitedRow = unlimitedEdition && unlimitedEdition.slug === c.set?.slug && unlimitedEdition.variantMatch(c.variant);
+      return isUnlimitedRow ? withUnlimitedImageOverride(c, c.set.name) : c;
+    }));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
