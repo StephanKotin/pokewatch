@@ -24,6 +24,7 @@ export function useWatchlistPrices(watchlist) {
       const params = new URLSearchParams({ name: card.name, grade: gradeKey });
       if (card.set) params.set('set', card.set);
       if (card.edition) params.set('edition', card.edition);
+      if (card.number) params.set('number', card.number);
 
       const history = await apiGet(`/api/price-history?${params}`).catch(() => []);
       if (!cancelled) {

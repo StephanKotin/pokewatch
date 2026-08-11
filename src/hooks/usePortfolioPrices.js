@@ -29,11 +29,13 @@ export function usePortfolioPrices(portfolio) {
       if (item.set) params.set('set', item.set);
       if (item.cardId) params.set('cardId', item.cardId);
       if (item.edition) params.set('edition', item.edition);
+      if (item.number) params.set('number', item.number);
 
       const gradeKey = CONDITION_TO_GRADE[item.condition] || 'nm';
       const historyParams = new URLSearchParams({ name: item.name, grade: gradeKey });
       if (item.set) historyParams.set('set', item.set);
       if (item.edition) historyParams.set('edition', item.edition);
+      if (item.number) historyParams.set('number', item.number);
 
       const [history, live] = await Promise.all([
         apiGet(`/api/price-history?${historyParams}`).catch(() => []),

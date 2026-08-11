@@ -173,26 +173,42 @@ function findBestSetMatch(results, wantedSet) {
   return partial || results[0] || null;
 }
 
+// Set-name matching alone isn't enough to pick the right card: promo sets in
+// particular reuse the same card name across many different numbered prints
+// (e.g. "Vaporeon V" appears as both SWSH150 and SWSH181 in the same "Sword &
+// Shield Promo Cards" set, at wildly different prices — $8 vs $86, confirmed
+// by hand). Every watchlist/portfolio row already stores the exact print
+// number from the card catalog, so an exact number match is checked first
+// and only falls back to fuzzy set-name matching when we don't have one.
+function findBestCardMatch(results, wantedSet, wantedNumber) {
+  if (wantedNumber) {
+    const exact = results.find((c) => c.cardNumber === wantedNumber);
+    if (exact) return exact;
+  }
+  return findBestSetMatch(results, wantedSet);
+}
+
 // pokemontcg.io has no concept of print edition (checked — the source data
 // has exactly one entry per card, 1st Edition or not), so this is the only
 // place "1st Edition" can factor in: as extra search text against
 // PokeTrace's real eBay comps.
-async function resolvePokeTraceCard(name, set, edition) {
+async function resolvePokeTraceCard(name, set, edition, number) {
   try {
     const searchName = edition && edition !== 'Unlimited' ? `${name} ${edition}` : name;
     const params = new URLSearchParams({ search: searchName, market: 'US', limit: '20' });
     const response = await pokeTraceFetch(`${POKETRACE_BASE}/cards?${params}`);
     const data = await response.json();
     const results = data.data || [];
-    return set ? findBestSetMatch(results, set) : (results[0] || null);
+    if (!set && !number) return results[0] || null;
+    return findBestCardMatch(results, set, number);
   } catch (e) {
     console.warn('[poketrace] card resolution failed:', e.message);
     return null;
   }
 }
 
-async function lookupCardPrices(name, set, realCardId, edition) {
-  let card = await resolvePokeTraceCard(name, set, edition);
+async function lookupCardPrices(name, set, realCardId, edition, number) {
+  let card = await resolvePokeTraceCard(name, set, edition, number);
 
   const hasNearMint = (card?.prices?.ebay?.NEAR_MINT?.avg) || (card?.prices?.tcgplayer?.NEAR_MINT?.avg);
   let fallbackSource = null;
@@ -466,7 +482,7 @@ app.put('/api/settings', authenticate, (req, res) => {
 // --- Public Routes (shared data, no auth needed) ---
 
 app.get('/api/prices', async (req, res) => {
-  const { name, set, cardId, edition } = req.query;
+  const { name, set, cardId, edition, number } = req.query;
   if (!name) return res.status(400).json({ error: 'name required' });
   try {
     // 1st Edition and Unlimited copies of the same card_id are different
@@ -474,7 +490,7 @@ app.get('/api/prices', async (req, res) => {
     const editionSuffix = edition && edition !== 'Unlimited' ? '-1st' : '';
     const snapshotId = (cardId || name).toLowerCase() + editionSuffix;
 
-    const { card, fallbackSource } = await lookupCardPrices(name, set, cardId, edition);
+    const { card, fallbackSource } = await lookupCardPrices(name, set, cardId, edition, number);
     if (card && card.prices) {
       const insert = db.prepare('INSERT INTO price_snapshots (card_id, grade, price, low, high, source) VALUES (?, ?, ?, ?, ?, ?)');
       const src = card.prices.ebay || card.prices.tcgplayer || {};
@@ -502,12 +518,12 @@ const PRICE_HISTORY_CACHE_MAX_AGE_SECONDS = 6 * 60 * 60;
 const priceHistoryCache = new Map(); // `${cardId}|${tier}` -> { data, cachedAt }
 
 app.get('/api/price-history', async (req, res) => {
-  const { name, set, edition, grade } = req.query;
+  const { name, set, edition, grade, number } = req.query;
   if (!name) return res.status(400).json({ error: 'name required' });
   const gradeKey = PRICE_CONDITIONS[grade] ? grade : 'nm';
   const tier = PRICE_CONDITIONS[gradeKey];
   try {
-    const card = await resolvePokeTraceCard(name, set, edition);
+    const card = await resolvePokeTraceCard(name, set, edition, number);
     if (!card) return res.json([]);
 
     const cacheKey = `${card.id}|${tier}`;
@@ -610,18 +626,18 @@ async function scanPrices() {
   const keyFor = (id, edition) => id.toLowerCase() + (edition && edition !== 'Unlimited' ? '-1st' : '');
 
   for (const card of db.prepare('SELECT * FROM watchlist').all()) {
-    targets.set(keyFor(card.id, card.edition), { name: card.name, set: card.set_name, realCardId: card.id, edition: card.edition, watchlistCard: card });
+    targets.set(keyFor(card.id, card.edition), { name: card.name, set: card.set_name, realCardId: card.id, edition: card.edition, number: card.number, watchlistCard: card });
   }
   for (const item of db.prepare('SELECT * FROM portfolio').all()) {
     const key = keyFor(item.card_id || item.name, item.edition);
-    if (!targets.has(key)) targets.set(key, { name: item.name, set: item.set_name, realCardId: item.card_id || null, edition: item.edition });
+    if (!targets.has(key)) targets.set(key, { name: item.name, set: item.set_name, realCardId: item.card_id || null, edition: item.edition, number: item.number });
   }
 
   const insert = db.prepare('INSERT INTO price_snapshots (card_id, grade, price, low, high, source) VALUES (?, ?, ?, ?, ?, ?)');
 
   for (const [snapshotId, target] of targets) {
     try {
-      const { card, fallbackSource } = await lookupCardPrices(target.name, target.set, target.realCardId, target.edition);
+      const { card, fallbackSource } = await lookupCardPrices(target.name, target.set, target.realCardId, target.edition, target.number);
       if (!card || !card.prices) continue;
       const src = card.prices.ebay || card.prices.tcgplayer || {};
       for (const [key, field] of Object.entries(PRICE_CONDITIONS)) {
