@@ -32,3 +32,21 @@ export function formatGradeTier(tier) {
   const [company, ...rest] = tier.split('_');
   return rest.length ? `${company} ${rest.join('.')}` : company;
 }
+
+// A perfect 10 is always the top-level numeric grade (never a half-grade —
+// no company grades above 10), so matching the literal "_10" suffix is
+// exact and doesn't need to account for BGS/CGC/etc.'s half-grade format.
+export function isGradeTen(tier) {
+  return !!tier && tier.endsWith('_10');
+}
+
+// Puts PSA tiers first (it's the grading company collectors weight most
+// heavily), leaving every other tier in whatever order the API returned
+// them — Array.sort is stable, so this only reorders the PSA/non-PSA split.
+export function sortGradeOptions(tiers) {
+  return [...(tiers || [])].sort((a, b) => {
+    const aPsa = a.startsWith('PSA_') ? 0 : 1;
+    const bPsa = b.startsWith('PSA_') ? 0 : 1;
+    return aPsa - bPsa;
+  });
+}

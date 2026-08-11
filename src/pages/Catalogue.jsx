@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { getEra } from '../data/eraMap';
 import { EDITIONS, isEditionEligible } from '../data/editions';
 import { fetchSets, fetchSetCards, fetchCardGrades } from '../api/poketrace';
-import { formatGradeTier } from '../data/grades';
+import { formatGradeTier, sortGradeOptions } from '../data/grades';
 import { rarityClass } from '../utils/format';
 import './Catalogue.css';
 
@@ -200,7 +200,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
     setGradeOptionsLoading(true);
     fetchCardGrades(addTarget.id)
       .then((res) => {
-        if (!cancelled) setGradeOptions(res?.gradedOptions || []);
+        if (!cancelled) setGradeOptions(sortGradeOptions(res?.gradedOptions));
       })
       .catch(() => { if (!cancelled) setGradeOptions([]); })
       .finally(() => { if (!cancelled) setGradeOptionsLoading(false); });

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
-import { CONDITIONS, formatGradeTier } from '../data/grades';
+import { CONDITIONS, formatGradeTier, isGradeTen, sortGradeOptions } from '../data/grades';
 import { extractTierPrice, TCG_CDN, fetchSets, fetchSetCards, searchCards, fetchCardGrades } from '../api/poketrace';
 import Sparkline from '../components/Sparkline';
 import {
@@ -138,7 +138,7 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
     setGradeOptionsLoading(true);
     fetchCardGrades(editItem.cardId)
       .then((res) => {
-        if (!cancelled) setGradeOptions(res?.gradedOptions || []);
+        if (!cancelled) setGradeOptions(sortGradeOptions(res?.gradedOptions));
       })
       .catch(() => { if (!cancelled) setGradeOptions([]); })
       .finally(() => { if (!cancelled) setGradeOptionsLoading(false); });
@@ -583,7 +583,7 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
                     {card.set && <span className="port-card-set" title={card.set}>{card.set}</span>}
                     <div className="port-card-tags">
                       {card.isGraded
-                        ? <span className="tag tag-graded">{card.gradeLabel || formatGradeTier(card.gradeTier)}</span>
+                        ? <span className={`tag tag-graded${isGradeTen(card.gradeTier) ? ' tag-grade10' : ''}`}>{card.gradeLabel || formatGradeTier(card.gradeTier)}</span>
                         : card.condition && <span className="tag">{card.condition}</span>}
                       {card.edition === '1st Edition' && <span className="tag tag-edition">1st Ed</span>}
                     </div>
