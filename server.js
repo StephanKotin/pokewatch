@@ -2,6 +2,8 @@ require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const fetch = require('node-fetch');
 const Database = require('better-sqlite3');
 const cron = require('node-cron');
@@ -67,7 +69,14 @@ function pokeTraceFetch(url, attempt = 1) {
 
 const POKEMONTCGIO_API_KEY = process.env.POKEMONTCGIO_API_KEY;
 const POKEMONTCGIO_BASE = 'https://api.pokemontcg.io/v2';
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+
+// No fallback: a generated secret would rotate on every restart and silently
+// invalidate every session on every deploy. Fail loudly at boot instead.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[fatal] JWT_SECRET is not set. Generate one with `openssl rand -hex 32` and set it in your environment.');
+  process.exit(1);
+}
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
@@ -456,8 +465,39 @@ function authenticate(req, res, next) {
   }
 }
 
-app.use(cors());
-app.use(express.json());
+// CSP is left off: the built page pulls Google Fonts' stylesheet and talks
+// to PostHog cross-origin, both of which a default CSP would block, and
+// there's no staging environment to catch that kind of breakage before it
+// hits production. The rest of helmet's headers (frameguard, HSTS,
+// nosniff, etc.) carry no such risk.
+app.use(helmet({ contentSecurityPolicy: false }));
+// The app only ever calls its own /api/* routes same-origin (via the Vite
+// dev proxy locally, and served directly in production), so this never
+// needs to allow a second origin — it only closes off third-party pages
+// making cross-origin requests against this API.
+app.use(cors({ origin: APP_BASE_URL }));
+app.use(express.json({ limit: '100kb' }));
+
+// Whether the droplet puts a reverse proxy (nginx/Caddy/etc.) in front of
+// this process isn't known — trust proxy is left at Express's default
+// (false), so this always keys off the raw socket address. If there is a
+// proxy, every request looks like it comes from the same IP and the limit
+// becomes one shared bucket for all users instead of per-visitor; if there
+// isn't, this is correct per-IP limiting either way. That degraded-but-safe
+// behavior beats the alternative of guessing trust proxy wrong, which would
+// either crash every auth request (unexpected X-Forwarded-For) or let a
+// spoofed header bypass the limit entirely. xForwardedForHeader validation
+// is turned off since we deliberately aren't reading that header at all.
+// Revisit once it's confirmed whether a proxy sits in front.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  message: { error: 'Too many attempts. Try again later.' },
+});
+
 // Serve Vite build output in production, fall back to public/ for legacy
 const fs = require('fs');
 const distPath = path.join(__dirname, 'dist');
@@ -466,7 +506,7 @@ app.use(express.static(fs.existsSync(distPath) ? distPath : publicPath));
 
 // --- Auth Routes ---
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
@@ -507,7 +547,7 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
