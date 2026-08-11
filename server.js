@@ -725,11 +725,11 @@ app.get('/api/listings', async (req, res) => {
 // endpoints and cache the result, same pattern as priceHistoryCache below) ---
 
 const CATALOGUE_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60;
-const setsCache = new Map(); // game -> { data, cachedAt }
-const setCardsCache = new Map(); // slug -> { data, cachedAt }
+const setsCache = new Map(); // game -> { data, cachedAt, maxAge }
+const setCardsCache = new Map(); // slug -> { data, cachedAt, maxAge }
 
 function catalogueCacheFresh(entry) {
-  return entry && (Date.now() - entry.cachedAt) / 1000 < CATALOGUE_CACHE_MAX_AGE_SECONDS;
+  return entry && (Date.now() - entry.cachedAt) / 1000 < entry.maxAge;
 }
 
 // PokeTrace splits some sets across market-specific entries (US/TCGplayer
@@ -769,15 +769,29 @@ app.get('/api/sets', async (req, res) => {
     // name matches — see getPokemonTcgIoSetsByName. pokemontcg.io's public
     // set list is English-only, so Japanese sets are left as-is (no era
     // grouping/logo for those, same as any PokeTrace set with no match).
+    //
+    // Confirmed live: a service restart clears this cache along with
+    // pokemonTcgIoSetsCache, so the *next* request has to redo enrichment
+    // from scratch. If that request lands during one of pokemontcg.io's
+    // documented transient 500/502 blips, enrichment silently no-ops (every
+    // set keeps releaseDate: null) and — without this maxAge distinction —
+    // that degraded catalogue used to get locked into this cache for the
+    // full 24h even after pokemontcg.io recovered seconds later, since nothing
+    // here knew the enrichment attempt had failed. Mirroring
+    // getPokemonTcgIoSetsByName's own short retry window here means a failed
+    // enrichment gets retried on the next request instead of being stuck.
+    let enriched = true;
     if (game === 'pokemon') {
       const metaByName = await getPokemonTcgIoSetsByName();
+      enriched = !!pokemonTcgIoSetsCache?.ok;
       all = all.map((s) => {
         const meta = metaByName.get(normalizeSetName(s.name));
         return meta ? { ...s, releaseDate: meta.releaseDate, series: meta.series, logo: meta.logo } : s;
       });
     }
 
-    setsCache.set(game, { data: all, cachedAt: Date.now() });
+    const maxAge = enriched ? CATALOGUE_CACHE_MAX_AGE_SECONDS : POKEMONTCGIO_SETS_RETRY_CACHE_MAX_AGE_SECONDS;
+    setsCache.set(game, { data: all, cachedAt: Date.now(), maxAge });
     res.json(all);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -801,7 +815,7 @@ app.get('/api/sets/:slug/cards', async (req, res) => {
       cursor = pagination?.hasMore ? pagination.nextCursor : null;
     } while (cursor);
     const deduped = dedupeCards(all);
-    setCardsCache.set(slug, { data: deduped, cachedAt: Date.now() });
+    setCardsCache.set(slug, { data: deduped, cachedAt: Date.now(), maxAge: CATALOGUE_CACHE_MAX_AGE_SECONDS });
     res.json(deduped);
   } catch (e) {
     res.status(500).json({ error: e.message });
