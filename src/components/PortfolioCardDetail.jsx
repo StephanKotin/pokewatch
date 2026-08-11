@@ -80,24 +80,45 @@ function usePriceSeries(item) {
   return { gradeData, availableKeys, loading };
 }
 
+// PokeTrace's real per-sale listing data (exact date, buyer platform,
+// grader) is Scale-plan only — confirmed live, this account (Growth) gets
+// a 403 "Scale plan required" on GET /cards/:id/listings. What's actually
+// available on this plan, and already fetched for the chart above, is
+// daily-aggregated price history — the average of that day's real sales,
+// not individual line items. "Recent prices" here means the most recent
+// days with sale activity, not a listing-by-listing feed.
+const RECENT_PRICE_COUNT = 5;
+
+function formatSaleDate(t) {
+  return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Whichever tier this copy is actually stored/tracked as, falling back to
+// raw — drives both the default chart toggle and the recent-prices list,
+// so the two stay in sync on a single "primary" series.
+function resolvePrimaryKey(card, availableKeys) {
+  const storedKey = card.isGraded && card.gradeTier
+    ? DETAIL_SERIES.find((s) => s.tier === card.gradeTier)?.key
+    : 'raw';
+  return availableKeys.includes(storedKey) ? storedKey : 'raw';
+}
+
 export default function PortfolioCardDetail({ card, onClose }) {
   const { gradeData, availableKeys, loading } = usePriceSeries(card);
   const [rangeDays, setRangeDays] = useState(30);
   const [activeGrades, setActiveGrades] = useState({ raw: true });
 
-  // Re-derive the default-active series whenever a new set of available
-  // keys comes in (i.e. once discovery finishes) — defaults to whichever
-  // tier this copy is actually stored as, falling back to raw.
+  const primaryKey = resolvePrimaryKey(card, availableKeys);
+
   useEffect(() => {
-    const storedKey = card.isGraded && card.gradeTier
-      ? DETAIL_SERIES.find((s) => s.tier === card.gradeTier)?.key
-      : 'raw';
-    const defaultKey = availableKeys.includes(storedKey) ? storedKey : 'raw';
-    setActiveGrades(Object.fromEntries(availableKeys.map((k) => [k, k === defaultKey])));
-  }, [availableKeys, card.isGraded, card.gradeTier]);
+    setActiveGrades(Object.fromEntries(availableKeys.map((k) => [k, k === primaryKey])));
+  }, [availableKeys, primaryKey]);
 
   const series = DETAIL_SERIES.filter((s) => availableKeys.includes(s.key));
   const toggleSeries = (key) => setActiveGrades((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const primarySeries = DETAIL_SERIES.find((s) => s.key === primaryKey);
+  const recentPrices = (gradeData[primaryKey] || []).slice(-RECENT_PRICE_COUNT).reverse();
 
   const image = getCardImage(card);
   const hiRes = getHiResImage(card);
@@ -184,7 +205,28 @@ export default function PortfolioCardDetail({ card, onClose }) {
                 Loading price history…
               </div>
             ) : (
-              <PriceChart series={series} gradeData={gradeData} activeGrades={activeGrades} rangeDays={rangeDays} />
+              <>
+                <PriceChart series={series} gradeData={gradeData} activeGrades={activeGrades} rangeDays={rangeDays} />
+
+                <div className="port-detail-recent">
+                  <div className="port-detail-recent-hdr">
+                    <span>Recent Prices{primarySeries ? ` · ${primarySeries.label}` : ''}</span>
+                    <span className="port-detail-recent-note">Daily avg, PokeTrace</span>
+                  </div>
+                  {recentPrices.length ? (
+                    <ul className="port-detail-recent-list">
+                      {recentPrices.map((p) => (
+                        <li key={p.t} className="port-detail-recent-row">
+                          <span className="port-detail-recent-date">{formatSaleDate(p.t)}</span>
+                          <span className="port-detail-recent-price">${fmtD(p.price)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="port-detail-recent-empty">No recent price data.</p>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </div>

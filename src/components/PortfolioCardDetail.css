@@ -122,6 +122,65 @@
   flex-shrink: 0;
 }
 
+.port-detail-recent {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.port-detail-recent-hdr {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.port-detail-recent-note {
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 0.6;
+}
+
+.port-detail-recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.port-detail-recent-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.85rem;
+}
+
+.port-detail-recent-row:last-child {
+  border-bottom: none;
+}
+
+.port-detail-recent-date {
+  color: var(--muted);
+}
+
+.port-detail-recent-price {
+  font-weight: 700;
+}
+
+.port-detail-recent-empty {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 0;
+}
+
 @media (max-width: 720px) {
   .port-detail-body {
     grid-template-columns: 1fr;
