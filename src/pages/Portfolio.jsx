@@ -585,7 +585,7 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
                       {card.isGraded
                         ? <span className={`tag tag-graded${isGradeTen(card.gradeTier) ? ' tag-grade10' : ''}`}>{card.gradeLabel || formatGradeTier(card.gradeTier)}</span>
                         : card.condition && <span className="tag">{card.condition}</span>}
-                      {card.edition === '1st Edition' && <span className="tag tag-edition">1st Ed</span>}
+                      {card.edition?.startsWith('1st Edition') && <span className="tag tag-edition">1st Ed</span>}
                     </div>
                   </div>
                 </div>

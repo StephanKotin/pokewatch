@@ -8,6 +8,15 @@
 // sources) rather than a set id.
 export const EDITIONS = ['Unlimited', '1st Edition'];
 
+// Base Set's first print run predates Wizards adding the "shadow" box
+// around the copyright line — real, set-specific print history rather than
+// a wear condition. Shadowless only ever happened for Base Set among the
+// WOTC sets, and every Base Set 1st Edition card was printed on that same
+// shadowless stock (there's no non-shadowless 1st Edition Base Set card),
+// so "1st Edition" alone is ambiguous for this set in a way it isn't for
+// the other nine.
+const BASE_SET_EDITIONS = ['Unlimited', 'Shadowless', '1st Edition Shadowless'];
+
 const EDITION_ELIGIBLE_SET_NAMES = new Set([
   'Base Set',
   'Jungle',
@@ -23,4 +32,8 @@ const EDITION_ELIGIBLE_SET_NAMES = new Set([
 
 export function isEditionEligible(setName) {
   return EDITION_ELIGIBLE_SET_NAMES.has(setName);
+}
+
+export function editionsForSet(setName) {
+  return setName === 'Base Set' ? BASE_SET_EDITIONS : EDITIONS;
 }

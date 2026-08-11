@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { getEra } from '../data/eraMap';
-import { EDITIONS, isEditionEligible } from '../data/editions';
+import { isEditionEligible, editionsForSet } from '../data/editions';
 import { fetchSets, fetchSetCards, fetchCardGrades } from '../api/poketrace';
 import { formatGradeTier, sortGradeOptions } from '../data/grades';
 import { rarityClass } from '../utils/format';
@@ -208,6 +208,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
   }, [addMode, addGraded, addTarget]);
 
   const editionEligible = modalSet ? isEditionEligible(modalSet.name) : false;
+  const editionOptions = editionsForSet(modalSet?.name);
 
   /* ---- submit add ---- */
   const handleAddSubmit = () => {
@@ -569,7 +570,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
               <div className="form-group">
                 <label>Edition</label>
                 <select value={addEdition} onChange={(e) => setAddEdition(e.target.value)}>
-                  {EDITIONS.map((e) => (
+                  {editionOptions.map((e) => (
                     <option key={e}>{e}</option>
                   ))}
                 </select>

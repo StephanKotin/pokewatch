@@ -219,6 +219,29 @@ function normalizeSetName(s) {
   return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+// PokeTrace and pokemontcg.io occasionally disagree on a set's display name
+// for the exact same real-world set — confirmed live: PokeTrace calls the
+// original 1999 set "Base Set", pokemontcg.io just calls it "Base". Since
+// the era/logo enrichment join in /api/sets matches on name, that one
+// mismatch was silently dropping Base Set out of era enrichment entirely
+// (no match -> no series -> falls into "Other Sets" instead of the WOTC
+// era group). Keyed by PokeTrace's name; extend if more of these turn up.
+const POKEMONTCGIO_SET_NAME_ALIASES = { 'Base Set': 'Base' };
+
+// Keeps price_snapshots/cron cache keys distinct per print-edition variant
+// of the same card_id — Unlimited, 1st Edition, and (Base Set only)
+// Shadowless / 1st Edition Shadowless are all different collectibles with
+// very different prices. "1st Edition" keeps its original "-1st" suffix
+// literal rather than a derived slug, so existing snapshot history for
+// already-tracked 1st Edition cards isn't orphaned under a new key; the
+// newer Base-Set-only edition strings have no prior data to preserve, so
+// they're just slugified generically.
+function snapshotEditionSuffix(edition) {
+  if (!edition || edition === 'Unlimited') return '';
+  if (edition === '1st Edition') return '-1st';
+  return '-' + edition.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 function findBestSetMatch(results, wantedSet) {
   const wanted = normalizeSetName(wantedSet);
   if (!wanted) return results[0] || null;
@@ -259,8 +282,9 @@ function findBestCardMatch(results, wantedSet, wantedNumber) {
 
 // pokemontcg.io has no concept of print edition (checked — the source data
 // has exactly one entry per card, 1st Edition or not), so this is the only
-// place "1st Edition" can factor in: as extra search text against
-// PokeTrace's real eBay comps.
+// place edition (1st Edition, or Base Set's Shadowless / 1st Edition
+// Shadowless) can factor in: as extra search text against PokeTrace's real
+// eBay comps.
 async function resolvePokeTraceCard(name, set, edition, number) {
   try {
     const searchName = edition && edition !== 'Unlimited' ? `${name} ${edition}` : name;
@@ -617,10 +641,9 @@ app.get('/api/prices', async (req, res) => {
   const { name, set, cardId, edition, number, gradeTier } = req.query;
   if (!name) return res.status(400).json({ error: 'name required' });
   try {
-    // 1st Edition and Unlimited copies of the same card_id are different
+    // Different print-edition variants of the same card_id are different
     // collectibles with very different prices — keep their snapshots apart.
-    const editionSuffix = edition && edition !== 'Unlimited' ? '-1st' : '';
-    const snapshotId = (cardId || name).toLowerCase() + editionSuffix;
+    const snapshotId = (cardId || name).toLowerCase() + snapshotEditionSuffix(edition);
 
     const cached = getFreshSnapshot(snapshotId, PRICE_CACHE_MAX_AGE_SECONDS);
     // A cache hit only covers what it actually contains — if this request
@@ -785,7 +808,8 @@ app.get('/api/sets', async (req, res) => {
       const metaByName = await getPokemonTcgIoSetsByName();
       enriched = !!pokemonTcgIoSetsCache?.ok;
       all = all.map((s) => {
-        const meta = metaByName.get(normalizeSetName(s.name));
+        const lookupName = POKEMONTCGIO_SET_NAME_ALIASES[s.name] || s.name;
+        const meta = metaByName.get(normalizeSetName(lookupName));
         return meta ? { ...s, releaseDate: meta.releaseDate, series: meta.series, logo: meta.logo } : s;
       });
     }
@@ -922,7 +946,7 @@ async function scanPrices() {
   // name, with a -1st suffix keeping 1st Edition copies out of the same
   // bucket as Unlimited copies of the same card).
   const targets = new Map();
-  const keyFor = (id, edition) => id.toLowerCase() + (edition && edition !== 'Unlimited' ? '-1st' : '');
+  const keyFor = (id, edition) => id.toLowerCase() + snapshotEditionSuffix(edition);
 
   for (const card of db.prepare('SELECT * FROM watchlist').all()) {
     targets.set(keyFor(card.id, card.edition), { name: card.name, set: card.set_name, realCardId: card.id, edition: card.edition, number: card.number, watchlistCard: card });
