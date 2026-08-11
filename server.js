@@ -17,6 +17,39 @@ const POKEMONTCGIO_API_KEY = process.env.POKEMONTCGIO_API_KEY;
 const POKEMONTCGIO_BASE = 'https://api.pokemontcg.io/v2';
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+const EMAIL_FROM = process.env.EMAIL_FROM || 'PokeWatch <onboarding@resend.dev>';
+const APP_BASE_URL = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+
+// Sends via Resend's REST API — no SDK needed, just a POST. Missing config
+// (no key set yet, or the request fails) logs a warning instead of throwing,
+// so a registration never gets stuck just because email isn't wired up.
+async function sendEmail({ to, subject, html }) {
+  if (!RESEND_API_KEY) {
+    console.warn('[email] RESEND_API_KEY not set — skipping email:', subject);
+    return false;
+  }
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from: EMAIL_FROM, to, subject, html }),
+    });
+    if (!response.ok) {
+      console.error('[email] send failed:', response.status, await response.text());
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error('[email] send error:', e.message);
+    return false;
+  }
+}
+
 const PRICE_CONDITIONS = { nm: 'NEAR_MINT', lp: 'LIGHTLY_PLAYED', mp: 'MODERATELY_PLAYED', hp: 'HEAVILY_PLAYED', dmg: 'DAMAGED' };
 
 // pokemontcg.io prices by print variant (normal/holofoil/etc.), not by wear
@@ -66,6 +99,28 @@ async function fetchPokemonTcgIoPrice(cardId, attempt = 1) {
 // comps); if it has no Near Mint quote and a real card id is known, fills
 // that gap from pokemontcg.io. Returns a card shaped like PokeTrace's own
 // response so callers don't need to know which source actually answered.
+// PokeTrace's `set` filter takes its own internal slug ("ex-firered-and-
+// leafgreen"), not the display name we store ("FireRed & LeafGreen") — and
+// that slug doesn't follow a guessable pattern (confirmed by hand against
+// their real catalog). Searching by name alone and matching against the
+// `set.name` each result already carries is far more reliable than trying
+// to construct their slug ourselves.
+function normalizeSetName(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function findBestSetMatch(results, wantedSet) {
+  const wanted = normalizeSetName(wantedSet);
+  if (!wanted) return results[0] || null;
+  const exact = results.find((c) => normalizeSetName(c.set?.name) === wanted);
+  if (exact) return exact;
+  const partial = results.find((c) => {
+    const rs = normalizeSetName(c.set?.name);
+    return rs && (rs.includes(wanted) || wanted.includes(rs));
+  });
+  return partial || results[0] || null;
+}
+
 async function lookupCardPrices(name, set, realCardId, edition) {
   let card = null;
   try {
@@ -74,13 +129,13 @@ async function lookupCardPrices(name, set, realCardId, edition) {
     // the only place "1st Edition" can factor in: as extra search text
     // against PokeTrace's real eBay comps.
     const searchName = edition && edition !== 'Unlimited' ? `${name} ${edition}` : name;
-    const params = new URLSearchParams({ search: searchName, market: 'US' });
-    if (set) params.set('set', set);
+    const params = new URLSearchParams({ search: searchName, market: 'US', limit: '20' });
     const response = await fetch(`${POKETRACE_BASE}/cards?${params}`, {
       headers: { 'X-API-Key': POKETRACE_API_KEY }
     });
     const data = await response.json();
-    card = (data.data || [])[0] || null;
+    const results = data.data || [];
+    card = set ? findBestSetMatch(results, set) : (results[0] || null);
   } catch (e) {
     console.warn('[prices] PokeTrace lookup failed:', e.message);
   }
@@ -99,7 +154,11 @@ async function lookupCardPrices(name, set, realCardId, edition) {
   return { card, fallbackSource };
 }
 
-const db = new Database(path.join(__dirname, 'pokewatch.db'));
+// DB_PATH lets a host with a persistent volume (e.g. Railway) point SQLite
+// at mounted storage instead of the app's own ephemeral directory, so data
+// survives redeploys. Defaults to the old behavior for local dev.
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'pokewatch.db');
+const db = new Database(DB_PATH);
 db.exec(`
   CREATE TABLE IF NOT EXISTS watchlist (
     id TEXT PRIMARY KEY,
@@ -146,6 +205,8 @@ db.exec(`
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'approved',
+    approval_token TEXT,
     created_at INTEGER DEFAULT (strftime('%s','now'))
   );
   CREATE TABLE IF NOT EXISTS user_settings (
@@ -175,6 +236,10 @@ try { db.exec("ALTER TABLE portfolio ADD COLUMN number TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE portfolio ADD COLUMN set_id TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE portfolio ADD COLUMN edition TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE alerts ADD COLUMN user_id TEXT"); } catch(e) {}
+// Existing accounts (created before approval-gating existed) default to
+// 'approved' so nobody already using the app gets locked out retroactively.
+try { db.exec("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'"); } catch(e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN approval_token TEXT"); } catch(e) {}
 
 // Auth middleware
 function authenticate(req, res, next) {
@@ -205,17 +270,40 @@ app.post('/api/auth/register', async (req, res) => {
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
+  const normalizedEmail = email.toLowerCase();
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail);
   if (existing) return res.status(409).json({ error: 'Email already registered' });
 
   const id = crypto.randomUUID();
   const passwordHash = await bcrypt.hash(password, 10);
+  const approvalToken = crypto.randomBytes(24).toString('hex');
 
-  db.prepare('INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)').run(id, email.toLowerCase(), passwordHash);
+  db.prepare('INSERT INTO users (id, email, password_hash, status, approval_token) VALUES (?, ?, ?, ?, ?)')
+    .run(id, normalizedEmail, passwordHash, 'pending', approvalToken);
   db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(id);
 
-  const token = jwt.sign({ userId: id }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ token, user: { id, email: email.toLowerCase() } });
+  if (ADMIN_EMAIL) {
+    const approveUrl = `${APP_BASE_URL}/api/admin/approve/${approvalToken}`;
+    const rejectUrl = `${APP_BASE_URL}/api/admin/reject/${approvalToken}`;
+    sendEmail({
+      to: ADMIN_EMAIL,
+      subject: `PokeWatch: approve ${normalizedEmail}?`,
+      html: `
+        <p><strong>${normalizedEmail}</strong> just requested a PokeWatch account.</p>
+        <p>
+          <a href="${approveUrl}" style="background:#57cc99;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;margin-right:8px;">Approve</a>
+          <a href="${rejectUrl}" style="background:#e63946;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;">Reject</a>
+        </p>
+      `,
+    }).catch(() => {});
+  } else {
+    console.warn('[auth] ADMIN_EMAIL not set — nobody was notified of new registration:', normalizedEmail);
+  }
+
+  res.json({
+    pending: true,
+    message: "Your account request has been sent for approval. You'll be able to sign in once it's approved.",
+  });
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -228,14 +316,48 @@ app.post('/api/auth/login', async (req, res) => {
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
 
+  if (user.status === 'pending') return res.status(403).json({ error: 'Your account is still awaiting approval' });
+  if (user.status === 'rejected') return res.status(403).json({ error: 'This account request was declined' });
+
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
   res.json({ token, user: { id: user.id, email: user.email } });
 });
 
 app.get('/api/auth/me', authenticate, (req, res) => {
-  const user = db.prepare('SELECT id, email FROM users WHERE id = ?').get(req.userId);
+  const user = db.prepare('SELECT id, email, status FROM users WHERE id = ?').get(req.userId);
   if (!user) return res.status(401).json({ error: 'User not found' });
+  if (user.status !== 'approved') return res.status(403).json({ error: 'Account not approved' });
   res.json({ user });
+});
+
+// --- Admin approval links (opened directly from the notification email) ---
+
+function approvalPage(message, color) {
+  return `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0d0d0f;color:#e8e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+    <div style="text-align:center;">
+      <h2 style="color:${color};">${message}</h2>
+      <p><a href="${APP_BASE_URL}" style="color:#4cc9f0;">Return to PokeWatch</a></p>
+    </div>
+  </body></html>`;
+}
+
+app.get('/api/admin/approve/:token', (req, res) => {
+  const user = db.prepare("SELECT * FROM users WHERE approval_token = ? AND status = 'pending'").get(req.params.token);
+  if (!user) return res.status(404).send(approvalPage('Request not found or already handled.', '#94a3b8'));
+  db.prepare("UPDATE users SET status = 'approved', approval_token = NULL WHERE id = ?").run(user.id);
+  sendEmail({
+    to: user.email,
+    subject: 'Your PokeWatch account is approved!',
+    html: `<p>You're approved — <a href="${APP_BASE_URL}">sign in here</a>.</p>`,
+  }).catch(() => {});
+  res.send(approvalPage(`Approved ${user.email}.`, '#57cc99'));
+});
+
+app.get('/api/admin/reject/:token', (req, res) => {
+  const user = db.prepare("SELECT * FROM users WHERE approval_token = ? AND status = 'pending'").get(req.params.token);
+  if (!user) return res.status(404).send(approvalPage('Request not found or already handled.', '#94a3b8'));
+  db.prepare("UPDATE users SET status = 'rejected', approval_token = NULL WHERE id = ?").run(user.id);
+  res.send(approvalPage(`Declined ${user.email}.`, '#e63946'));
 });
 
 // --- Settings Routes ---

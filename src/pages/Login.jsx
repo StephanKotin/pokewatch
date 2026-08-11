@@ -8,6 +8,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [pendingMessage, setPendingMessage] = useState('');
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -15,7 +16,9 @@ export default function Login() {
     setSubmitting(true);
     try {
       if (isRegister) {
-        await register(email, password);
+        const data = await register(email, password);
+        setPendingMessage(data.message);
+        setPassword('');
       } else {
         await login(email, password);
       }
@@ -72,6 +75,20 @@ export default function Login() {
           </div>
         </div>
 
+        {pendingMessage ? (
+          <div style={{
+            background: 'rgba(87, 204, 153, 0.12)',
+            border: '1px solid var(--green, #57cc99)',
+            borderRadius: 8,
+            padding: '14px 16px',
+            color: 'var(--text)',
+            fontSize: 13.5,
+            lineHeight: 1.5,
+            textAlign: 'center',
+          }}>
+            {pendingMessage}
+          </div>
+        ) : (
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
             <label style={{
@@ -135,6 +152,7 @@ export default function Login() {
             {submitting ? 'Please wait...' : (isRegister ? 'Create Account' : 'Sign In')}
           </button>
         </form>
+        )}
 
         <div style={{
           textAlign: 'center',
@@ -144,7 +162,7 @@ export default function Login() {
         }}>
           {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
           <button
-            onClick={() => { setIsRegister(!isRegister); setError(''); }}
+            onClick={() => { setIsRegister(!isRegister); setError(''); setPendingMessage(''); }}
             style={{
               background: 'none',
               border: 'none',

@@ -47,8 +47,8 @@ export function AuthProvider({ children }) {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Registration failed');
-    localStorage.setItem(TOKEN_KEY, data.token);
-    setUser(data.user);
+    // No token yet — the account is pending approval, not logged in.
+    return data;
   }, []);
 
   const logout = useCallback(() => {
