@@ -6,6 +6,7 @@ import { useSettings } from './hooks/useSettings';
 import { useWatchlist } from './hooks/useWatchlist';
 import { usePortfolio } from './hooks/usePortfolio';
 import { useAlerts } from './hooks/useAlerts';
+import { usePortfolioPrices } from './hooks/usePortfolioPrices';
 import { searchListingsAPI } from './api/poketrace';
 import { trackPageview } from './analytics';
 import Login from './pages/Login';
@@ -36,6 +37,11 @@ export default function App() {
   const { settings, updateSettings } = useSettings();
   const { watchlist, addCard, removeCard, updateCard, loading } = useWatchlist();
   const { portfolio, addItem, removeItem } = usePortfolio();
+  // Lifted up here (rather than inside the Portfolio page) so it survives
+  // tab switches — Portfolio unmounts every time you navigate away, which
+  // was resetting this and re-fetching every card's price from scratch on
+  // every single visit instead of reusing what's already been fetched.
+  const { priceData: portfolioPriceData, loading: portfolioPricesLoading } = usePortfolioPrices(portfolio);
   const { firedAlerts, fireAlert, clearAlert } = useAlerts();
 
   const [activeTab, setActiveTabState] = useState(() => tabFromPath(window.location.pathname));
@@ -227,6 +233,8 @@ export default function App() {
             portfolio={portfolio}
             addItem={addItem}
             removeItem={removeItem}
+            priceData={portfolioPriceData}
+            pricesLoading={portfolioPricesLoading}
             toast={toast}
           />
         )}

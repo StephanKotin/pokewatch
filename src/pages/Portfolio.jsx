@@ -2,7 +2,6 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 import { GRADES, CONDITION_TO_GRADE, CONDITIONS } from '../data/grades';
 import { extractGradePrice, TCG_CDN, getFullCardDB } from '../api/poketrace';
-import { usePortfolioPrices } from '../hooks/usePortfolioPrices';
 import Sparkline from '../components/Sparkline';
 import {
   rowsFromCSV,
@@ -77,7 +76,7 @@ function buildChartData(portfolio, priceData) {
   return points;
 }
 
-export default function Portfolio({ portfolio, addItem, removeItem, toast }) {
+export default function Portfolio({ portfolio, addItem, removeItem, priceData, pricesLoading, toast }) {
   const [editItem, setEditItem] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
@@ -88,8 +87,6 @@ export default function Portfolio({ portfolio, addItem, removeItem, toast }) {
     purchaseDate: '',
     notes: '',
   });
-
-  const { priceData, loading: pricesLoading } = usePortfolioPrices(portfolio);
 
   /* ---- CSV import ---- */
   const fileInputRef = useRef(null);
