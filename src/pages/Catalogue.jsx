@@ -57,6 +57,11 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
             releaseDate: s.releaseDate || null,
             series: s.series || null,
             logo: s.logo || null,
+            // Only present on the synthetic per-edition entries the server
+            // splits out for the 10 WOTC-era sets (see WOTC_SET_EDITIONS in
+            // server.js) — undefined for every other set.
+            editionLabel: s.editionLabel || null,
+            editionOrder: s.editionOrder ?? null,
             lang,
           }))
         );
@@ -105,7 +110,12 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
       byKey.get(era.key).sets.push(s);
     }
     for (const g of byKey.values()) {
-      g.sets.sort((a, b) => (b.releaseDate || '').localeCompare(a.releaseDate || '') || a.name.localeCompare(b.name));
+      g.sets.sort(
+        (a, b) =>
+          (b.releaseDate || '').localeCompare(a.releaseDate || '') ||
+          a.name.localeCompare(b.name) ||
+          (a.editionOrder ?? 0) - (b.editionOrder ?? 0)
+      );
     }
     return eraOrder.filter((era) => byKey.has(era.key)).map((era) => byKey.get(era.key));
   }, [sets, eraFilter, setSearch, eraOrder]);
@@ -348,6 +358,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
                 <div className="cat-set-info">
                   <div className="cat-set-name">
                     {s.name}
+                    {s.editionLabel && <span className="cat-edition-badge">{s.editionLabel}</span>}
                     {s.lang === 'jp' && <span className="jp-badge">JP</span>}
                   </div>
                   <div className="cat-set-meta">
@@ -392,7 +403,10 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
                   {modalSet.name.slice(0, 2).toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="modal-set-name">{modalSet.name}</h3>
+                  <h3 className="modal-set-name">
+                    {modalSet.name}
+                    {modalSet.editionLabel && <span className="cat-edition-badge">{modalSet.editionLabel}</span>}
+                  </h3>
                   <p className="modal-set-sub">
                     {modalSet.releaseDate && <>{modalSet.releaseDate} &middot; </>}
                     {modalSet.cardCount} cards

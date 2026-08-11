@@ -132,11 +132,20 @@ export function normalizeDate(raw) {
 // Resolves a CSV "set" column value against the live set list fetched from
 // PokeTrace (/api/sets) — the caller fetches that list once per import and
 // passes it in, since resolution here needs to stay synchronous.
+//
+// WOTC-era sets now appear as 2-3 entries sharing one `name` (one per print
+// edition — see WOTC_SET_EDITIONS in server.js), so a name match is no
+// longer guaranteed unique. Picking the first match would silently always
+// resolve to the same edition regardless of what the CSV row actually says,
+// collapsing the ambiguous-match UI that otherwise lets the user pick the
+// right print. Returning null instead falls back to the caller's
+// cross-catalogue search path, which matches by name+number across every
+// edition and preserves that disambiguation.
 export function resolveSetSlug(setName, sets) {
   if (!setName) return null;
   const key = setName.trim().toLowerCase();
-  const match = sets.find((s) => s.name.toLowerCase() === key);
-  return match ? match.slug : null;
+  const matches = sets.filter((s) => s.name.toLowerCase() === key);
+  return matches.length === 1 ? matches[0].slug : null;
 }
 
 // Collectors commonly write card numbers as "215/203" (number/print-run

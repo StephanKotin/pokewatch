@@ -833,14 +833,142 @@ function catalogueCacheFresh(entry) {
 // only have EU-sourced rows (confirmed live: "destined-rivals" returns 0
 // cards under market=US despite reporting 410 in /sets). Fetch across all
 // markets instead and dedupe same-card entries, preferring US.
+//
+// The key includes `variant` — confirmed live that WOTC-era sets carry
+// distinct Unlimited/1st_Edition (and _Holofoil) rows for the same
+// cardNumber+name, which are genuinely different prints, not market
+// duplicates of the same print. Keying on cardNumber+name alone collapsed
+// those together and silently dropped every 1st Edition row.
 function dedupeCards(cards) {
   const byKey = new Map();
   for (const c of cards) {
-    const key = `${(c.cardNumber || '').trim()}|${(c.name || '').trim().toLowerCase()}`;
+    const key = `${(c.cardNumber || '').trim()}|${(c.name || '').trim().toLowerCase()}|${c.variant || ''}`;
     const existing = byKey.get(key);
     if (!existing || (existing.market !== 'US' && c.market === 'US')) byKey.set(key, c);
   }
   return [...byKey.values()];
+}
+
+// Cursor-paginates + dedupes one real PokeTrace set slug's cards, cached
+// 24h in setCardsCache. Shared by /api/sets/:slug/cards (real and composite
+// WOTC-edition slugs both bottom out here) and the WOTC expansion pass in
+// /api/sets below, so the two never issue duplicate PokeTrace traffic for
+// the same underlying slug.
+async function getCardsForRealSlug(slug) {
+  const cached = setCardsCache.get(slug);
+  if (catalogueCacheFresh(cached)) return cached.data;
+  let all = [];
+  let cursor = null;
+  do {
+    const params = new URLSearchParams({ set: slug, limit: '20' });
+    if (cursor) params.set('cursor', cursor);
+    const response = await pokeTraceFetch(`${POKETRACE_BASE}/cards?${params}`);
+    if (!response.ok) break;
+    const { data, pagination } = await response.json();
+    all = all.concat(data || []);
+    cursor = pagination?.hasMore ? pagination.nextCursor : null;
+  } while (cursor);
+  const deduped = dedupeCards(all);
+  setCardsCache.set(slug, { data: deduped, cachedAt: Date.now(), maxAge: CATALOGUE_CACHE_MAX_AGE_SECONDS });
+  return deduped;
+}
+
+// PokeTrace's own catalogue is disorganized for exactly these 10 WOTC-era
+// sets (same fixed list as editions.js's EDITION_ELIGIBLE_SET_NAMES): some
+// have duplicate/orphan slugs for the same real-world set (confirmed live —
+// "team-rocket-porygon" reports cardCount:2 in /sets but /cards for it
+// returns 0 rows), and none consistently expose a print-edition split under
+// one slug (Base Set's real Unlimited/Shadowless/1st-Edition-Shadowless
+// split lives entirely under the differently-named "base-set-shadowless"
+// slug, not "base-set"). This table is a deliberate, narrowly-scoped
+// exception to "never hand-curate PokeTrace's slugs" — safe here because
+// the list is fixed and small, unlike the general ~500-set catalogue where
+// near-duplicate slugs are often genuinely ambiguous (market splits,
+// reprints) and a general merge would misattribute data.
+//
+// Every card lands in exactly one edition bucket per set — variantMatch for
+// the "Unlimited" bucket is the catch-all for PokeTrace's unlabeled
+// "Normal"/"Holofoil"/unset variant rows, so there's no duplication. Cards
+// with no edition-specific PokeTrace listing at all (a real data gap, e.g.
+// some Jungle/Fossil holo rares) only ever appear under "Unlimited" — an
+// inherent limitation of PokeTrace's data, not something this table can fix.
+function wotcPair(slug, extraDropSlugs = []) {
+  return {
+    dropSlugs: [slug, ...extraDropSlugs],
+    editions: [
+      { key: 'unlimited', label: 'Unlimited', slug, variantMatch: (v) => !v || !v.startsWith('1st_Edition') },
+      { key: '1st-edition', label: '1st Edition', slug, variantMatch: (v) => !!v && v.startsWith('1st_Edition') },
+    ],
+  };
+}
+
+const WOTC_SET_EDITIONS = {
+  'Base Set': {
+    dropSlugs: ['base-set', 'base-set-shadowless'],
+    editions: [
+      { key: 'unlimited', label: 'Unlimited', slug: 'base-set', variantMatch: () => true },
+      { key: 'shadowless', label: 'Shadowless', slug: 'base-set-shadowless', variantMatch: (v) => !!v && v.startsWith('Unlimited') },
+      { key: '1st-edition-shadowless', label: '1st Edition Shadowless', slug: 'base-set-shadowless', variantMatch: (v) => !!v && v.startsWith('1st_Edition') },
+    ],
+  },
+  'Team Rocket': wotcPair('team-rocket', ['team-rocket-porygon']),
+  'Jungle': wotcPair('jungle'),
+  'Fossil': wotcPair('fossil'),
+  'Gym Heroes': wotcPair('gym-heroes'),
+  'Gym Challenge': wotcPair('gym-challenge'),
+  'Neo Genesis': wotcPair('neo-genesis'),
+  'Neo Discovery': wotcPair('neo-discovery'),
+  'Neo Revelation': wotcPair('neo-revelation'),
+  'Neo Destiny': wotcPair('neo-destiny'),
+};
+
+// Composite catalogue slug for one WOTC set edition: "<realSlug>::<key>".
+// "::" never appears in a real PokeTrace slug, so this is unambiguous to
+// detect and split.
+function parseCompositeSlug(slug) {
+  const idx = slug.indexOf('::');
+  if (idx === -1) return null;
+  return { realSlug: slug.slice(0, idx), editionKey: slug.slice(idx + 2) };
+}
+
+// Replaces each WOTC set's raw (duplicate/orphan/edition-split-hidden)
+// PokeTrace entries with one synthetic entry per print edition. Runs after
+// pokemontcg.io enrichment so releaseDate/series/logo carry over. Failures
+// are isolated per set — a PokeTrace hiccup fetching one set's cards leaves
+// that set's raw entries in place rather than breaking the whole response.
+async function expandWotcSets(all) {
+  let result = all;
+  for (const [setName, config] of Object.entries(WOTC_SET_EDITIONS)) {
+    try {
+      const rawMatch = result.find((s) => s.name === setName);
+      if (!rawMatch) continue; // set not present in this game's list at all
+
+      const realSlugs = [...new Set(config.editions.map((e) => e.slug))];
+      const cardsBySlug = new Map(
+        await Promise.all(realSlugs.map(async (slug) => [slug, await getCardsForRealSlug(slug)]))
+      );
+
+      const synthetic = config.editions.map((edition, i) => {
+        const cards = cardsBySlug.get(edition.slug) || [];
+        const cardCount = cards.filter((c) => edition.variantMatch(c.variant)).length;
+        return {
+          slug: `${edition.slug}::${edition.key}`,
+          name: setName,
+          editionLabel: edition.label,
+          editionOrder: i,
+          cardCount,
+          releaseDate: rawMatch.releaseDate,
+          series: rawMatch.series,
+          logo: rawMatch.logo,
+        };
+      });
+
+      result = result.filter((s) => !config.dropSlugs.includes(s.slug)).concat(synthetic);
+    } catch (e) {
+      console.warn(`[catalogue] WOTC edition split failed for "${setName}":`, e.message);
+    }
+  }
+  return result;
 }
 
 app.get('/api/sets', async (req, res) => {
@@ -884,6 +1012,7 @@ app.get('/api/sets', async (req, res) => {
         const meta = metaByName.get(normalizeSetName(lookupName));
         return meta ? { ...s, releaseDate: meta.releaseDate, series: meta.series, logo: meta.logo } : s;
       });
+      all = await expandWotcSets(all);
     }
 
     const maxAge = enriched ? CATALOGUE_CACHE_MAX_AGE_SECONDS : POKEMONTCGIO_SETS_RETRY_CACHE_MAX_AGE_SECONDS;
@@ -896,23 +1025,18 @@ app.get('/api/sets', async (req, res) => {
 
 app.get('/api/sets/:slug/cards', async (req, res) => {
   const { slug } = req.params;
-  const cached = setCardsCache.get(slug);
-  if (catalogueCacheFresh(cached)) return res.json(cached.data);
   try {
-    let all = [];
-    let cursor = null;
-    do {
-      const params = new URLSearchParams({ set: slug, limit: '20' });
-      if (cursor) params.set('cursor', cursor);
-      const response = await pokeTraceFetch(`${POKETRACE_BASE}/cards?${params}`);
-      if (!response.ok) break;
-      const { data, pagination } = await response.json();
-      all = all.concat(data || []);
-      cursor = pagination?.hasMore ? pagination.nextCursor : null;
-    } while (cursor);
-    const deduped = dedupeCards(all);
-    setCardsCache.set(slug, { data: deduped, cachedAt: Date.now(), maxAge: CATALOGUE_CACHE_MAX_AGE_SECONDS });
-    res.json(deduped);
+    const composite = parseCompositeSlug(slug);
+    if (!composite) return res.json(await getCardsForRealSlug(slug));
+
+    const config = Object.values(WOTC_SET_EDITIONS).find((c) =>
+      c.editions.some((e) => e.slug === composite.realSlug && e.key === composite.editionKey)
+    );
+    const edition = config?.editions.find((e) => e.slug === composite.realSlug && e.key === composite.editionKey);
+    if (!edition) return res.status(404).json({ error: 'unknown edition slug' });
+
+    const cards = await getCardsForRealSlug(composite.realSlug);
+    res.json(cards.filter((c) => edition.variantMatch(c.variant)));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

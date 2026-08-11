@@ -254,6 +254,17 @@
   font-weight: 700;
 }
 
+.cat-edition-badge {
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.6rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 700;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 /* Card action buttons */
 .tcg-card-actions {
   display: flex;
