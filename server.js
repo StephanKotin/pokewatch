@@ -617,6 +617,101 @@ app.get('/api/listings', async (req, res) => {
   }
 });
 
+// --- Catalogue (PokeTrace is the catalogue source of truth — no local
+// database of sets/cards; these routes crawl PokeTrace's own paginated
+// endpoints and cache the result, same pattern as priceHistoryCache below) ---
+
+const CATALOGUE_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60;
+const setsCache = new Map(); // game -> { data, cachedAt }
+const setCardsCache = new Map(); // slug -> { data, cachedAt }
+
+function catalogueCacheFresh(entry) {
+  return entry && (Date.now() - entry.cachedAt) / 1000 < CATALOGUE_CACHE_MAX_AGE_SECONDS;
+}
+
+// PokeTrace splits some sets across market-specific entries (US/TCGplayer
+// vs EU/Cardmarket) for what's physically the same print, so a hard
+// `market=US` filter silently empties out any set/search that happens to
+// only have EU-sourced rows (confirmed live: "destined-rivals" returns 0
+// cards under market=US despite reporting 410 in /sets). Fetch across all
+// markets instead and dedupe same-card entries, preferring US.
+function dedupeCards(cards) {
+  const byKey = new Map();
+  for (const c of cards) {
+    const key = `${(c.cardNumber || '').trim()}|${(c.name || '').trim().toLowerCase()}`;
+    const existing = byKey.get(key);
+    if (!existing || (existing.market !== 'US' && c.market === 'US')) byKey.set(key, c);
+  }
+  return [...byKey.values()];
+}
+
+app.get('/api/sets', async (req, res) => {
+  const game = req.query.game === 'pokemon-japanese' ? 'pokemon-japanese' : 'pokemon';
+  const cached = setsCache.get(game);
+  if (catalogueCacheFresh(cached)) return res.json(cached.data);
+  try {
+    let all = [];
+    let cursor = null;
+    do {
+      const params = new URLSearchParams({ game, limit: '100' });
+      if (cursor) params.set('cursor', cursor);
+      const response = await pokeTraceFetch(`${POKETRACE_BASE}/sets?${params}`);
+      if (!response.ok) break;
+      const { data, pagination } = await response.json();
+      all = all.concat(data || []);
+      cursor = pagination?.hasMore ? pagination.nextCursor : null;
+    } while (cursor);
+    setsCache.set(game, { data: all, cachedAt: Date.now() });
+    res.json(all);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/sets/:slug/cards', async (req, res) => {
+  const { slug } = req.params;
+  const cached = setCardsCache.get(slug);
+  if (catalogueCacheFresh(cached)) return res.json(cached.data);
+  try {
+    let all = [];
+    let cursor = null;
+    do {
+      const params = new URLSearchParams({ set: slug, limit: '20' });
+      if (cursor) params.set('cursor', cursor);
+      const response = await pokeTraceFetch(`${POKETRACE_BASE}/cards?${params}`);
+      if (!response.ok) break;
+      const { data, pagination } = await response.json();
+      all = all.concat(data || []);
+      cursor = pagination?.hasMore ? pagination.nextCursor : null;
+    } while (cursor);
+    const deduped = dedupeCards(all);
+    setCardsCache.set(slug, { data: deduped, cachedAt: Date.now() });
+    res.json(deduped);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// CSV-import fallback for rows whose set name doesn't resolve to a known
+// slug — lets PokeTrace's own search cover the "which set is this card
+// actually in" question instead of scanning a locally-held catalogue.
+app.get('/api/cards/search', async (req, res) => {
+  const { name, number } = req.query;
+  if (!name) return res.status(400).json({ error: 'name required' });
+  try {
+    const params = new URLSearchParams({ search: name, limit: '20' });
+    const response = await pokeTraceFetch(`${POKETRACE_BASE}/cards?${params}`);
+    if (!response.ok) return res.json([]);
+    const { data } = await response.json();
+    const filtered = number
+      ? (data || []).filter((c) => (c.cardNumber || '').split('/')[0].replace(/^0+(?=\d)/, '') === number.split('/')[0].replace(/^0+(?=\d)/, ''))
+      : (data || []);
+    res.json(dedupeCards(filtered));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Protected Routes (user-scoped) ---
 
 app.get('/api/watchlist', authenticate, (req, res) => {

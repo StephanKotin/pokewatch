@@ -82,40 +82,20 @@ export function extractGradePrice(pokeTraceCard, gradeKey, grades) {
   return null;
 }
 
-// Static card database (bundled at build time)
-let _cardDB = null;
-async function getCardDB() {
-  if (_cardDB) return _cardDB;
-  const mod = await import('../data/cards.json');
-  _cardDB = mod.default || mod;
-  return _cardDB;
+// Catalogue: sets and cards come straight from PokeTrace via the server's
+// cached /api/sets and /api/sets/:slug/cards proxies — no local database.
+export async function fetchSets(game) {
+  return apiGet(`/api/sets?game=${encodeURIComponent(game)}`);
 }
 
-// Exposed for callers that need to search across every set (e.g. CSV import
-// matching) rather than one set at a time.
-export const getFullCardDB = getCardDB;
+export async function fetchSetCards(slug) {
+  return apiGet(`/api/sets/${encodeURIComponent(slug)}/cards`);
+}
 
-// CDN image paths differ from app set IDs for some sets
-const CDN_PATH_MAP = {
-  fossil: 'base3',
-  jungle: 'base2',
-};
-
-export async function fetchTCGCards(setId) {
-  const db = await getCardDB();
-  const cards = db[setId];
-  if (cards && cards.length > 0) {
-    const cdnPath = CDN_PATH_MAP[setId] || setId;
-    return cards.map(c => ({
-      id: c.id,
-      name: c.name,
-      number: c.number,
-      rarity: c.rarity || '',
-      images: { small: `${TCG_CDN}/${cdnPath}/${c.number}.png` },
-    }));
-  }
-  // Fallback for sets not in the static DB
-  return null;
+export async function searchCards(name, number) {
+  const params = new URLSearchParams({ name });
+  if (number) params.set('number', number);
+  return apiGet(`/api/cards/search?${params}`);
 }
 
 export async function searchListingsAPI(card) {

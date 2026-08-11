@@ -185,7 +185,6 @@ select option { background: var(--surface2); }
 .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 1100px; overflow: hidden; animation: modalIn .25s ease; position: relative; flex-shrink: 0; }
 @keyframes modalIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
 .modal-header { padding: 22px 28px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 18px; position: sticky; top: 0; background: var(--surface); z-index: 10; }
-.modal-set-logo { width: 80px; height: 52px; object-fit: contain; flex-shrink: 0; }
 .modal-set-name { font-family: 'Bangers', cursive; font-size: 26px; letter-spacing: 1px; }
 .modal-set-sub { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); margin-top: 3px; }
 .modal-close { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; }

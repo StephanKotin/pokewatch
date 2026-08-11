@@ -1,4 +1,3 @@
-import { ALL_SETS } from '../data/sets';
 import { CONDITIONS } from '../data/grades';
 
 // --- CSV parsing (handles quoted fields, commas and quotes inside them) ---
@@ -128,16 +127,17 @@ export function normalizeDate(raw) {
   return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
 }
 
-// --- card matching against the static catalogue ---
+// --- card matching against PokeTrace ---
 
-function resolveSetId(setName) {
+// Resolves a CSV "set" column value against the live set list fetched from
+// PokeTrace (/api/sets) — the caller fetches that list once per import and
+// passes it in, since resolution here needs to stay synchronous.
+export function resolveSetSlug(setName, sets) {
   if (!setName) return null;
   const key = setName.trim().toLowerCase();
-  const match = ALL_SETS.find((s) => s.name.toLowerCase() === key);
-  return match ? match.id : null;
+  const match = sets.find((s) => s.name.toLowerCase() === key);
+  return match ? match.slug : null;
 }
-
-const setNameById = Object.fromEntries(ALL_SETS.map((s) => [s.id, s.name]));
 
 // Collectors commonly write card numbers as "215/203" (number/print-run
 // size) and annotate variant prints in the name itself, e.g. "Umbreon VMAX
@@ -153,21 +153,17 @@ function stripNameQualifiers(name) {
   return name.replace(/\s*\([^)]*\)/g, '').trim();
 }
 
-function findById(cardDB, cardId) {
-  const setId = cardId.includes('-') ? cardId.slice(0, cardId.lastIndexOf('-')) : null;
-  const cards = setId ? cardDB[setId] : null;
-  const card = cards ? cards.find((c) => c.id === cardId) : null;
-  return card ? { ...card, setId } : null;
-}
-
 const MAX_CANDIDATES = 8;
 
-// Matches one parsed CSV row to real catalogue card(s).
-// Returns { status: 'matched' | 'ambiguous' | 'unmatched', candidates }
-// candidates are { id, name, number, rarity, setId }.
-export function matchCard(row, cardDB) {
+// Matches one parsed CSV row against `cards`, a flat list of PokeTrace cards
+// the caller has already fetched (either one set's cards, when row.set
+// resolved to a slug, or cross-catalogue search results otherwise). Each
+// entry is expected in the normalized shape { id, name, number, rarity,
+// image, setSlug, setName } — see normalizeApiCard in Portfolio.jsx.
+// Returns { status: 'matched' | 'ambiguous' | 'unmatched', candidates }.
+export function matchCard(row, cards) {
   if (row.cardId) {
-    const found = findById(cardDB, row.cardId);
+    const found = cards.find((c) => c.id === row.cardId) || null;
     return found
       ? { status: 'matched', candidates: [found] }
       : { status: 'unmatched', candidates: [] };
@@ -176,20 +172,8 @@ export function matchCard(row, cardDB) {
   if (!row.name) return { status: 'unmatched', candidates: [] };
   const nameKey = stripNameQualifiers(row.name).toLowerCase();
   const numberKey = normalizeCardNumber(row.number);
-  const setId = resolveSetId(row.set);
 
-  let candidates = [];
-  if (setId && cardDB[setId]) {
-    candidates = cardDB[setId]
-      .filter((c) => c.name.toLowerCase() === nameKey)
-      .map((c) => ({ ...c, setId }));
-  } else {
-    for (const [sid, cards] of Object.entries(cardDB)) {
-      for (const c of cards) {
-        if (c.name.toLowerCase() === nameKey) candidates.push({ ...c, setId: sid });
-      }
-    }
-  }
+  let candidates = cards.filter((c) => c.name.toLowerCase() === nameKey);
 
   if (numberKey && candidates.length > 1) {
     const byNumber = candidates.filter((c) => normalizeCardNumber(c.number) === numberKey);
@@ -199,8 +183,4 @@ export function matchCard(row, cardDB) {
   if (candidates.length === 1) return { status: 'matched', candidates };
   if (candidates.length > 1) return { status: 'ambiguous', candidates: candidates.slice(0, MAX_CANDIDATES) };
   return { status: 'unmatched', candidates: [] };
-}
-
-export function setNameForId(setId) {
-  return setNameById[setId] || setId;
 }

@@ -1,8 +1,6 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { ALL_SETS, JP_SETS } from '../data/sets';
-import { ERAS, getEra } from '../data/eraMap';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { EDITIONS, isEditionEligible } from '../data/editions';
-import { fetchTCGCards, TCG_CDN } from '../api/poketrace';
+import { fetchSets, fetchSetCards } from '../api/poketrace';
 import { rarityClass } from '../utils/format';
 import './Catalogue.css';
 
@@ -15,7 +13,7 @@ const RARITY_FILTERS = [
 
 export default function Catalogue({ watchlist, addCard, portfolio, addItem, toast }) {
   const [lang, setLang] = useState('en');
-  const [eraFilter, setEraFilter] = useState('all');
+  const [setSearch, setSetSearch] = useState('');
   const [modalSet, setModalSet] = useState(null);
   const [modalCards, setModalCards] = useState([]);
   const [modalLoading, setModalLoading] = useState(false);
@@ -30,40 +28,40 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
   const [addPurchaseDate, setAddPurchaseDate] = useState('');
   const [addNotes, setAddNotes] = useState('');
 
-  const sets = lang === 'jp' ? JP_SETS : ALL_SETS;
+  const [sets, setSets] = useState([]);
+  const [setsLoading, setSetsLoading] = useState(true);
 
-  /* ---- derived era list ---- */
-  const eras = useMemo(() => {
-    const seen = new Set();
-    return sets.reduce((acc, s) => {
-      const era = getEra(s.series);
-      if (!seen.has(era.key)) {
-        seen.add(era.key);
-        acc.push(era);
-      }
-      return acc;
-    }, []);
-  }, [sets]);
+  /* ---- load sets from PokeTrace whenever the language tab changes ---- */
+  useEffect(() => {
+    let cancelled = false;
+    setSetsLoading(true);
+    fetchSets(lang === 'jp' ? 'pokemon-japanese' : 'pokemon')
+      .then((data) => {
+        if (cancelled) return;
+        setSets(
+          (data || []).map((s) => ({
+            id: s.slug,
+            name: s.name,
+            cardCount: s.cardCount,
+            lang,
+          }))
+        );
+      })
+      .catch(() => { if (!cancelled) setSets([]); })
+      .finally(() => { if (!cancelled) setSetsLoading(false); });
+    return () => { cancelled = true; };
+  }, [lang]);
 
-  /* ---- filtered & grouped sets ---- */
-  const grouped = useMemo(() => {
-    const filtered = sets.filter((s) => {
-      if (eraFilter !== 'all' && getEra(s.series).key !== eraFilter) return false;
-      return true;
-    });
-
-    const groups = [];
-    const seen = new Set();
-    for (const s of filtered) {
-      const era = getEra(s.series);
-      if (!seen.has(era.key)) {
-        seen.add(era.key);
-        groups.push({ era, sets: [] });
-      }
-      groups.find((g) => g.era.key === era.key).sets.push(s);
-    }
-    return groups;
-  }, [sets, eraFilter]);
+  // PokeTrace's /sets doesn't return a usable releaseDate (confirmed null
+  // across the catalogue live), so there's no signal left to group sets
+  // into eras — just an alphabetical, searchable list instead. With
+  // hundreds of English sets in PokeTrace's catalogue, a name filter is
+  // the only practical way to find one.
+  const filteredSets = useMemo(() => {
+    const q = setSearch.trim().toLowerCase();
+    const filtered = q ? sets.filter((s) => s.name.toLowerCase().includes(q)) : sets;
+    return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+  }, [sets, setSearch]);
 
   /* ---- open set modal ---- */
   const openSet = useCallback(
@@ -74,29 +72,18 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
       setRarityFilter('all');
       setModalLoading(true);
       try {
-        const cards = await fetchTCGCards(set.id);
-        if (cards) {
-          setModalCards(cards);
-        } else {
-          // fallback for sets not in static DB
-          const fallback = Array.from({ length: set.total || set.printedTotal }, (_, i) => ({
-            id: `${set.id}-${i + 1}`,
-            name: `Card #${i + 1}`,
-            number: String(i + 1),
-            rarity: '',
-            images: { small: `${TCG_CDN}/${set.id}/${i + 1}.png` },
-          }));
-          setModalCards(fallback);
-        }
+        const cards = await fetchSetCards(set.id);
+        setModalCards(
+          (cards || []).map((c) => ({
+            id: c.id,
+            name: c.name,
+            number: (c.cardNumber || '').split('/')[0].replace(/^0+(?=\d)/, ''),
+            rarity: c.rarity || '',
+            image: c.image || '',
+          }))
+        );
       } catch {
-        const fallback = Array.from({ length: set.total || set.printedTotal }, (_, i) => ({
-          id: `${set.id}-${i + 1}`,
-          name: `Card #${i + 1}`,
-          number: String(i + 1),
-          rarity: '',
-          images: { small: `${TCG_CDN}/${set.id}/${i + 1}.png` },
-        }));
-        setModalCards(fallback);
+        setModalCards([]);
       } finally {
         setModalLoading(false);
       }
@@ -151,7 +138,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
     setAddNotes('');
   };
 
-  const editionEligible = modalSet ? isEditionEligible(modalSet.id) : false;
+  const editionEligible = modalSet ? isEditionEligible(modalSet.name) : false;
 
   /* ---- submit add ---- */
   const handleAddSubmit = () => {
@@ -167,7 +154,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
         setId: modalSet?.id || '',
         number: addTarget.number,
         rarity: addTarget.rarity || '',
-        image: addTarget.images?.small || `${TCG_CDN}/${modalSet?.id}/${addTarget.number}.png`,
+        image: addTarget.image || '',
         condition: addCondition,
         edition,
         maxPrice: addMaxPrice ? parseFloat(addMaxPrice) : null,
@@ -182,7 +169,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
         setId: modalSet?.id || '',
         number: addTarget.number,
         rarity: addTarget.rarity || '',
-        image: addTarget.images?.small || `${TCG_CDN}/${modalSet?.id}/${addTarget.number}.png`,
+        image: addTarget.image || '',
         condition: addCondition,
         edition,
         purchasePrice: addPurchasePrice ? parseFloat(addPurchasePrice) : null,
@@ -210,7 +197,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
             </button>
             <button
               className={`cat-lang-btn${lang === 'jp' ? ' active' : ''}`}
-              onClick={() => { setLang('jp'); setEraFilter('all'); }}
+              onClick={() => setLang('jp')}
             >
               Japanese
               <span className="cat-lang-badge">Coming Soon</span>
@@ -219,70 +206,49 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
         </div>
       </div>
 
-      {/* ---- era filters ---- */}
+      {/* ---- set search ---- */}
       <div className="era-filters">
-        <button
-          className={`era-btn${eraFilter === 'all' ? ' active' : ''}`}
-          onClick={() => setEraFilter('all')}
-        >
-          All Eras
-        </button>
-        {eras.map((era) => (
-          <button
-            key={era.key}
-            className={`era-btn${eraFilter === era.key ? ' active' : ''}`}
-            style={eraFilter === era.key ? { borderColor: era.color, color: era.color } : {}}
-            onClick={() => setEraFilter(era.key)}
-          >
-            {era.label}
-          </button>
-        ))}
+        <div className="modal-search-wrap">
+          <input
+            type="text"
+            placeholder="Search sets..."
+            value={setSearch}
+            onChange={(e) => setSetSearch(e.target.value)}
+          />
+        </div>
       </div>
 
-      {/* ---- grouped sets ---- */}
-      {grouped.map((group) => (
-        <section key={group.era.key} className="cat-era-section">
-          <div className="cat-era-heading">
-            <span className="cat-era-title" style={{ color: group.era.color }}>
-              {group.era.label}
-            </span>
-            <span className="cat-era-line" style={{ backgroundColor: group.era.color }} />
-            <span className="cat-era-count">{group.sets.length} sets</span>
-          </div>
-          <div className="cat-sets-row">
-            {group.sets.map((s) => (
-              <div key={s.id} className="cat-set-card" onClick={() => openSet(s)}>
-                <div className="cat-set-img-wrap">
-                  <img
-                    className="cat-set-logo"
-                    src={`https://images.pokemontcg.io/${s.id}/logo.png`}
-                    alt={s.name}
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      e.target.nextSibling && (e.target.nextSibling.style.display = 'flex');
-                    }}
-                  />
-                  <div className="cat-set-logo-placeholder" style={{ display: 'none' }}>
-                    {s.name.slice(0, 2).toUpperCase()}
-                  </div>
-                </div>
-                <div className="cat-set-info">
-                  <div className="cat-set-name">
-                    {s.name}
-                    {s.lang === 'jp' && <span className="jp-badge">JP</span>}
-                  </div>
-                  <div className="cat-set-meta">
-                    <span className="cat-set-date">{s.releaseDate?.slice(0, 4)}</span>
-                    <span className="cat-set-count">{s.printedTotal || s.total} cards</span>
-                  </div>
+      {/* ---- set grid ---- */}
+      {setsLoading && (
+        <div className="modal-loading">
+          <div className="scan-spinner" />
+          Loading sets...
+        </div>
+      )}
+      {!setsLoading && filteredSets.length > 0 && (
+        <div className="cat-sets-row">
+          {filteredSets.map((s) => (
+            <div key={s.id} className="cat-set-card" onClick={() => openSet(s)}>
+              <div className="cat-set-img-wrap">
+                <div className="cat-set-logo-placeholder">
+                  {s.name.slice(0, 2).toUpperCase()}
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
-      ))}
+              <div className="cat-set-info">
+                <div className="cat-set-name">
+                  {s.name}
+                  {s.lang === 'jp' && <span className="jp-badge">JP</span>}
+                </div>
+                <div className="cat-set-meta">
+                  <span className="cat-set-count">{s.cardCount} cards</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {grouped.length === 0 && (
+      {!setsLoading && filteredSets.length === 0 && (
         <div className="empty-state">
           <div className="empty-icon">&#128270;</div>
           <p>No sets match this filter.</p>
@@ -294,18 +260,12 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
         <div className="modal-overlay" onClick={() => setModalSet(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <img
-                className="modal-set-logo"
-                src={`https://images.pokemontcg.io/${modalSet.id}/logo.png`}
-                alt=""
-                onError={(e) => (e.target.style.display = 'none')}
-              />
+              <div className="cat-set-logo-placeholder">
+                {modalSet.name.slice(0, 2).toUpperCase()}
+              </div>
               <div>
                 <h3 className="modal-set-name">{modalSet.name}</h3>
-                <p className="modal-set-sub">
-                  {modalSet.series} &middot; {modalSet.releaseDate} &middot;{' '}
-                  {modalSet.printedTotal || modalSet.total} cards
-                </p>
+                <p className="modal-set-sub">{modalSet.cardCount} cards</p>
               </div>
               <button className="modal-close" onClick={() => setModalSet(null)}>
                 &times;
@@ -357,7 +317,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
                         <div className="tcg-card-img-wrap">
                           <img
                             className="tcg-card-img"
-                            src={card.images?.small || `${TCG_CDN}/${modalSet.id}/${card.number}.png`}
+                            src={card.image}
                             alt={card.name}
                             loading="lazy"
                           />

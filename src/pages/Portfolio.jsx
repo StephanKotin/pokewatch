@@ -1,21 +1,37 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 import { GRADES, CONDITION_TO_GRADE, CONDITIONS } from '../data/grades';
-import { extractGradePrice, TCG_CDN, getFullCardDB } from '../api/poketrace';
+import { extractGradePrice, TCG_CDN, fetchSets, fetchSetCards, searchCards } from '../api/poketrace';
 import Sparkline from '../components/Sparkline';
 import {
   rowsFromCSV,
   matchCard,
+  resolveSetSlug,
   normalizeCondition,
   normalizeEdition,
   normalizePrice,
   normalizeQuantity,
   normalizeDate,
-  setNameForId,
+  normalizeCardNumber,
 } from '../utils/csvImport';
 import { isEditionEligible } from '../data/editions';
 import { fmtD } from '../utils/format';
 import './Portfolio.css';
+
+// PokeTrace's raw card shape (id, name, cardNumber, rarity, image,
+// set:{slug,name}) normalized to what csvImport's matchCard compares
+// against.
+function normalizeApiCard(c) {
+  return {
+    id: c.id,
+    name: c.name,
+    number: normalizeCardNumber(c.cardNumber),
+    rarity: c.rarity || '',
+    image: c.image || '',
+    setSlug: c.set?.slug || '',
+    setName: c.set?.name || '',
+  };
+}
 
 function uniqueId(baseId, existingIds) {
   if (!existingIds.has(baseId)) return baseId;
@@ -109,9 +125,34 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
         toast && toast('No rows found in that file', 'error');
         return;
       }
-      const cardDB = await getFullCardDB();
-      const rows = parsed.map((r) => {
-        const match = matchCard(r, cardDB);
+
+      // Resolve each row's set name against PokeTrace's live set list, then
+      // fetch each *distinct* resolved slug's cards once (most CSVs cluster
+      // around a handful of sets) instead of loading the whole catalogue.
+      const sets = await fetchSets('pokemon');
+      const slugByLine = new Map();
+      const distinctSlugs = new Set();
+      for (const r of parsed) {
+        const slug = resolveSetSlug(r.set, sets);
+        if (slug) {
+          slugByLine.set(r._line, slug);
+          distinctSlugs.add(slug);
+        }
+      }
+      const cardsBySlug = new Map();
+      await Promise.all(
+        [...distinctSlugs].map(async (slug) => {
+          const cards = await fetchSetCards(slug);
+          cardsBySlug.set(slug, (cards || []).map(normalizeApiCard));
+        })
+      );
+
+      const rows = await Promise.all(parsed.map(async (r) => {
+        const slug = slugByLine.get(r._line);
+        const cards = slug
+          ? cardsBySlug.get(slug)
+          : (await searchCards(r.name, r.number).catch(() => [])).map(normalizeApiCard);
+        const match = matchCard(r, cards);
         return {
           ...r,
           condition: normalizeCondition(r.condition),
@@ -123,7 +164,7 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
           selectedIndex: 0,
           skip: match.status === 'unmatched',
         };
-      });
+      }));
       setImportRows(rows);
       setShowImportModal(true);
     } catch (err) {
@@ -168,12 +209,12 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
           id,
           cardId: candidate ? candidate.id : null,
           name: candidate ? candidate.name : row.name,
-          set: candidate ? setNameForId(candidate.setId) : row.set || '',
-          setId: candidate ? candidate.setId : null,
+          set: candidate ? candidate.setName : row.set || '',
+          setId: candidate ? candidate.setSlug : null,
           number: candidate ? candidate.number : row.number || '',
-          image: candidate ? `${TCG_CDN}/${candidate.setId}/${candidate.number}.png` : null,
+          image: candidate ? candidate.image : null,
           condition: row.condition,
-          edition: candidate && isEditionEligible(candidate.setId) ? row.edition : null,
+          edition: candidate && isEditionEligible(candidate.setName) ? row.edition : null,
           purchasePrice: row.purchasePrice || 0,
           purchaseDate: row.purchaseDate || new Date().toISOString().slice(0, 10),
           notes: row.notes || '',
@@ -648,7 +689,7 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
                         <td>
                           {row.match.status === 'matched' && (
                             <span className="import-match-badge matched">
-                              {row.match.candidates[0].name} ({setNameForId(row.match.candidates[0].setId)} #{row.match.candidates[0].number})
+                              {row.match.candidates[0].name} ({row.match.candidates[0].setName} #{row.match.candidates[0].number})
                             </span>
                           )}
                           {row.match.status === 'ambiguous' && (
@@ -660,7 +701,7 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
                               >
                                 {row.match.candidates.map((c, i) => (
                                   <option key={c.id} value={i}>
-                                    {c.name} — {setNameForId(c.setId)} #{c.number} ({c.rarity || 'n/a'})
+                                    {c.name} — {c.setName} #{c.number} ({c.rarity || 'n/a'})
                                   </option>
                                 ))}
                               </select>
@@ -674,7 +715,7 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
                           {row.condition}
                           {row.edition === '1st Edition' &&
                             row.match.status !== 'unmatched' &&
-                            isEditionEligible(row.match.candidates[row.selectedIndex]?.setId) &&
+                            isEditionEligible(row.match.candidates[row.selectedIndex]?.setName) &&
                             ' · 1st Ed'}
                         </td>
                         <td>{row.purchasePrice != null ? `$${fmtD(row.purchasePrice)}` : '—'}</td>
