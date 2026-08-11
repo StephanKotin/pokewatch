@@ -50,3 +50,17 @@ export function sortGradeOptions(tiers) {
     return aPsa - bPsa;
   });
 }
+
+// The three price series PortfolioCardDetail compares for a single card.
+// `tier: null` means "raw" — request /api/price-history with grade=nm
+// rather than a gradeTier. Colors are a validated categorical triple
+// (dataviz skill's validate_palette.js, dark-mode surface #1a1a19 — this
+// app has no light theme): lightness band, chroma floor, CVD separation
+// (deltaE 9.4), normal-vision separation (deltaE 26.5), and contrast all
+// pass. Deliberately distinct from GRADES' condition colors above so
+// grading-tier identity never reads as a wear-condition color.
+export const DETAIL_SERIES = [
+  { key: 'raw', label: 'Raw', color: '#3987e5', tier: null },
+  { key: 'psa10', label: 'PSA 10', color: '#d95926', tier: 'PSA_10' },
+  { key: 'psa9', label: 'PSA 9', color: '#199e70', tier: 'PSA_9' },
+];

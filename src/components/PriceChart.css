@@ -4,16 +4,16 @@
 }
 
 .chart-tooltip {
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: var(--surface2, #1e1e24);
+  border: 1px solid var(--border, #2a2a35);
   border-radius: 8px;
   padding: 8px 12px;
   font-size: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .chart-tooltip-date {
   margin: 0 0 4px;
   font-weight: 600;
-  color: #333;
+  color: var(--text, #e8e8f0);
 }

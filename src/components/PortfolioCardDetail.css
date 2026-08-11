@@ -1,0 +1,129 @@
+.port-detail-modal {
+  max-width: 1000px;
+}
+
+.port-detail-body {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 28px;
+}
+
+.port-detail-image-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.port-detail-image {
+  width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.port-detail-image-placeholder {
+  width: 100%;
+  aspect-ratio: 63/88;
+  border-radius: 12px;
+  background: var(--surface2, #1e1e24);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: var(--muted);
+}
+
+.port-detail-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface2, #1e1e24);
+}
+
+.port-detail-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
+
+.port-detail-stat-lbl {
+  color: var(--muted);
+}
+
+.port-detail-stat-val {
+  font-weight: 700;
+}
+
+.port-detail-stat-val.up {
+  color: #57cc99;
+}
+
+.port-detail-stat-val.down {
+  color: #f87171;
+}
+
+.port-detail-chart-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.port-detail-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.port-detail-ranges {
+  display: flex;
+  gap: 6px;
+}
+
+.port-detail-series-toggles {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.port-series-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.port-series-pill:hover {
+  color: var(--text);
+}
+
+.port-series-pill.active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.port-series-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .port-detail-body {
+    grid-template-columns: 1fr;
+  }
+}

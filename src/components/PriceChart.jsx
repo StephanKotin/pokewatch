@@ -8,13 +8,10 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
-import { GRADES } from '../data/grades';
 import { fmtD } from '../utils/format';
 import './PriceChart.css';
 
-const gradeMap = Object.fromEntries(GRADES.map((g) => [g.key, g]));
-
-function CustomTooltip({ active, payload, label }) {
+function CustomTooltip({ active, payload, label, seriesMap }) {
   if (!active || !payload || !payload.length) return null;
   const date = new Date(label);
   const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -22,7 +19,7 @@ function CustomTooltip({ active, payload, label }) {
     <div className="chart-tooltip">
       <p className="chart-tooltip-date">{dateStr}</p>
       {payload.map((entry) => {
-        const g = gradeMap[entry.dataKey];
+        const g = seriesMap[entry.dataKey];
         if (!g || entry.value == null) return null;
         return (
           <p key={entry.dataKey} style={{ color: g.color, margin: '2px 0' }}>
@@ -34,7 +31,12 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-export default function PriceChart({ gradeData, activeGrades, rangeDays }) {
+// `series`: [{ key, label, color }] — the set of comparable price lines to
+// draw (e.g. raw wear conditions, or raw/PSA-10/PSA-9 grading tiers). Not
+// hardcoded to one domain so this same chart drives either.
+export default function PriceChart({ series, gradeData, activeGrades, rangeDays }) {
+  const gradeMap = useMemo(() => Object.fromEntries(series.map((g) => [g.key, g])), [series]);
+
   const chartData = useMemo(() => {
     const cutoff = Date.now() - rangeDays * 86400000;
     const dayMs = 86400000;
@@ -49,7 +51,7 @@ export default function PriceChart({ gradeData, activeGrades, rangeDays }) {
       dayBuckets[d] = {};
     }
 
-    const activeKeys = GRADES.filter((g) => activeGrades[g.key]).map((g) => g.key);
+    const activeKeys = series.filter((g) => activeGrades[g.key]).map((g) => g.key);
 
     activeKeys.forEach((key) => {
       const sales = gradeData[key] || [];
@@ -79,9 +81,9 @@ export default function PriceChart({ gradeData, activeGrades, rangeDays }) {
     }
 
     return points;
-  }, [gradeData, activeGrades, rangeDays]);
+  }, [gradeData, activeGrades, rangeDays, series]);
 
-  const activeGradeList = GRADES.filter((g) => activeGrades[g.key]);
+  const activeGradeList = series.filter((g) => activeGrades[g.key]);
 
   if (!chartData.length) {
     return (
@@ -105,7 +107,7 @@ export default function PriceChart({ gradeData, activeGrades, rangeDays }) {
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
           <XAxis
             dataKey="time"
             type="number"
@@ -114,16 +116,16 @@ export default function PriceChart({ gradeData, activeGrades, rangeDays }) {
               const d = new Date(t);
               return `${d.getMonth() + 1}/${d.getDate()}`;
             }}
-            tick={{ fontSize: 11 }}
-            stroke="#ccc"
+            tick={{ fontSize: 11, fill: 'var(--muted, #6b6b80)' }}
+            stroke="var(--border, #2a2a35)"
           />
           <YAxis
-            tick={{ fontSize: 11 }}
-            stroke="#ccc"
+            tick={{ fontSize: 11, fill: 'var(--muted, #6b6b80)' }}
+            stroke="var(--border, #2a2a35)"
             tickFormatter={(v) => `$${fmtD(v)}`}
             width={50}
           />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<CustomTooltip seriesMap={gradeMap} />} />
           {activeGradeList.map((g) => (
             <Area
               key={g.key}

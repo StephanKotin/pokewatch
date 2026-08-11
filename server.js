@@ -742,28 +742,41 @@ app.get('/api/prices', async (req, res) => {
 // a few hours (matching the cron's cadence) so repeat page loads don't
 // re-spend quota re-fetching a card's history that hasn't changed yet.
 const PRICE_HISTORY_PERIOD = '90d';
+const PRICE_HISTORY_PERIODS = ['7d', '30d', '90d', '1y'];
 const PRICE_HISTORY_CACHE_MAX_AGE_SECONDS = 6 * 60 * 60;
-const priceHistoryCache = new Map(); // `${cardId}|${tier}` -> { data, cachedAt }
+const priceHistoryCache = new Map(); // `${cardId}|${tier}|${period}` -> { data, cachedAt }
 
 app.get('/api/price-history', async (req, res) => {
-  const { name, set, edition, grade, number, gradeTier } = req.query;
+  const { name, set, edition, grade, number, gradeTier, period } = req.query;
   if (!name) return res.status(400).json({ error: 'name required' });
   // Graded tiers (e.g. "PSA_10") are already PokeTrace's real tier string —
   // used as-is. Raw requests go through the short-key -> tier-name map,
-  // defaulting to nm/NEAR_MINT for anything unrecognized.
+  // defaulting to nm/NEAR_MINT for anything unrecognized. Default period
+  // unchanged from before this param existed, so existing callers (the
+  // portfolio/watchlist list views' sparklines) keep their current range.
   const gradeKey = gradeTier || (PRICE_CONDITIONS[grade] ? grade : 'nm');
   const tier = gradeTier || PRICE_CONDITIONS[gradeKey];
+  const requestedPeriod = PRICE_HISTORY_PERIODS.includes(period) ? period : PRICE_HISTORY_PERIOD;
   try {
     const cardId = await resolveCardId(name, set, edition, number);
     if (!cardId) return res.json([]);
 
-    const cacheKey = `${cardId}|${tier}`;
+    const cacheKey = `${cardId}|${tier}|${requestedPeriod}`;
     const cached = priceHistoryCache.get(cacheKey);
     if (cached && (Date.now() - cached.cachedAt) / 1000 < PRICE_HISTORY_CACHE_MAX_AGE_SECONDS) {
       return res.json(cached.data);
     }
 
-    const params = new URLSearchParams({ period: PRICE_HISTORY_PERIOD, limit: '100' });
+    // limit is a cap, not a target — a short period naturally returns far
+    // fewer rows regardless, so there's no cost to asking generously.
+    // Confirmed live: the old flat limit=100 silently truncated period=1y
+    // down to the same row count (and same earliest date) as period=90d
+    // for any card with more than 100 rows already inside 90 days — 1y
+    // wasn't actually returning more history at all. 365 is PokeTrace's
+    // real enforced max here (confirmed live: 400 gets a 400 Bad Request —
+    // "Number must be less than or equal to 365" — which this route's
+    // !response.ok handling was silently swallowing into an empty array).
+    const params = new URLSearchParams({ period: requestedPeriod, limit: '365' });
     const response = await pokeTraceFetch(`${POKETRACE_BASE}/cards/${cardId}/prices/${tier}/history?${params}`);
     if (!response.ok) return res.json([]);
     const { data: rows } = await response.json();

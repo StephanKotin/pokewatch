@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 import { CONDITIONS, formatGradeTier, isGradeTen, sortGradeOptions } from '../data/grades';
-import { extractTierPrice, TCG_CDN, fetchSets, fetchSetCards, searchCards, fetchCardGrades } from '../api/poketrace';
+import { extractTierPrice, fetchSets, fetchSetCards, searchCards, fetchCardGrades } from '../api/poketrace';
 import Sparkline from '../components/Sparkline';
 import {
   rowsFromCSV,
@@ -16,6 +16,8 @@ import {
 } from '../utils/csvImport';
 import { isEditionEligible } from '../data/editions';
 import { fmtD } from '../utils/format';
+import { getCardImage } from '../utils/cardImage';
+import PortfolioCardDetail from '../components/PortfolioCardDetail';
 import './Portfolio.css';
 
 // PokeTrace's raw card shape (id, name, cardNumber, rarity, image,
@@ -38,19 +40,6 @@ function uniqueId(baseId, existingIds) {
   let n = 2;
   while (existingIds.has(`${baseId}__${n}`)) n++;
   return `${baseId}__${n}`;
-}
-
-function getCardImage(item) {
-  if (item.image) return item.image;
-  if (item.setId && item.number) return `${TCG_CDN}/${item.setId}/${item.number}.png`;
-  return null;
-}
-
-// pokemontcg.io serves a sharper "_hires" variant at the same path for most
-// cards; falls back to the regular image (via onError) if one doesn't exist.
-function getHiResImage(item) {
-  const img = getCardImage(item);
-  return img ? img.replace(/\.png$/, '_hires.png') : null;
 }
 
 // Graded cards price off their specific graded tier (e.g. "PSA_10"). Raw
@@ -453,7 +442,7 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
   };
 
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [previewCard, setPreviewCard] = useState(null);
+  const [detailCard, setDetailCard] = useState(null);
 
   const handleDelete = (card) => {
     setOpenMenuId(null);
@@ -633,7 +622,7 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
 
                 <div
                   className="port-card-image-wrap"
-                  onClick={() => img && setPreviewCard(card)}
+                  onClick={() => setDetailCard(card)}
                 >
                   {img ? (
                     <img className="port-card-image" src={img} alt="" />
@@ -982,33 +971,9 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
         </div>
       )}
 
-      {/* ---- card image preview ---- */}
-      {previewCard && (
-        <div className="port-preview-overlay" onClick={() => setPreviewCard(null)}>
-          <div className="port-preview-content" onClick={(e) => e.stopPropagation()}>
-            <button className="port-preview-close" onClick={() => setPreviewCard(null)}>
-              &times;
-            </button>
-            <img
-              className="port-preview-img"
-              src={getHiResImage(previewCard)}
-              alt={previewCard.name}
-              onError={(e) => {
-                const fallback = getCardImage(previewCard);
-                if (fallback && e.target.src !== fallback) e.target.src = fallback;
-              }}
-            />
-            <div className="port-preview-caption">
-              <div className="port-preview-name">{previewCard.name}</div>
-              {(previewCard.set || previewCard.number) && (
-                <div className="port-preview-meta">
-                  {previewCard.set}
-                  {previewCard.number ? ` · #${previewCard.number}` : ''}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {/* ---- card detail: image + price history/grade comparison ---- */}
+      {detailCard && (
+        <PortfolioCardDetail card={detailCard} onClose={() => setDetailCard(null)} />
       )}
     </div>
   );
