@@ -455,43 +455,48 @@ export default function Portfolio({ portfolio, addItem, removeItem, toast }) {
             const img = getCardImage(card);
             return (
               <div key={card.id} className="port-card">
-                <div className="port-card-header">
-                  {img && (
-                    <img
-                      className="port-tcg-img"
-                      src={img}
-                      alt=""
-                      onClick={() => setPreviewCard(card)}
-                    />
+                <div className="port-card-menu-wrap">
+                  <button
+                    className="port-card-menu-btn"
+                    onClick={() => setOpenMenuId(openMenuId === card.id ? null : card.id)}
+                    title="Card options"
+                  >
+                    &#8942;
+                  </button>
+                  {openMenuId === card.id && (
+                    <div className="port-card-menu">
+                      <button onClick={() => { setOpenMenuId(null); openEdit(card); }}>Edit</button>
+                      <button onClick={() => handleDuplicate(card)}>Duplicate</button>
+                      <button className="port-card-menu-danger" onClick={() => handleDelete(card)}>
+                        Delete
+                      </button>
+                    </div>
                   )}
-                  <div>
-                    <div className="port-card-name">{card.name}</div>
-                    <div className="port-card-meta">
-                      {card.set && <span>{card.set}</span>}
+                </div>
+
+                <div
+                  className="port-card-image-wrap"
+                  onClick={() => img && setPreviewCard(card)}
+                >
+                  {img ? (
+                    <img className="port-card-image" src={img} alt="" />
+                  ) : (
+                    <div className="port-card-image-placeholder">?</div>
+                  )}
+                </div>
+
+                <div className="port-card-info">
+                  <div className="port-card-name" title={card.name}>{card.name}</div>
+                  <div className="port-card-meta">
+                    {card.set && <span className="port-card-set" title={card.set}>{card.set}</span>}
+                    <div className="port-card-tags">
                       {card.condition && <span className="tag">{card.condition}</span>}
                       {card.edition === '1st Edition' && <span className="tag tag-edition">1st Ed</span>}
                     </div>
                   </div>
-                  <div className="port-card-menu-wrap">
-                    <button
-                      className="port-card-menu-btn"
-                      onClick={() => setOpenMenuId(openMenuId === card.id ? null : card.id)}
-                      title="Card options"
-                    >
-                      &#8942;
-                    </button>
-                    {openMenuId === card.id && (
-                      <div className="port-card-menu">
-                        <button onClick={() => { setOpenMenuId(null); openEdit(card); }}>Edit</button>
-                        <button onClick={() => handleDuplicate(card)}>Duplicate</button>
-                        <button className="port-card-menu-danger" onClick={() => handleDelete(card)}>
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 </div>
-                <div className="port-card-body">
+
+                <div className="port-card-stats">
                   <div className="port-cell">
                     <span className="port-cell-lbl">Purchase</span>
                     <span className="port-cell-val">${fmtD(card.purchasePrice || 0)}</span>
@@ -502,14 +507,12 @@ export default function Portfolio({ portfolio, addItem, removeItem, toast }) {
                       {card.estValue != null ? `$${fmtD(card.estValue)}` : 'No data'}
                     </span>
                   </div>
-                  <div className="port-cell">
-                    <span className="port-cell-lbl">P&amp;L</span>
-                    <span className={`port-cell-val ${card.pnl == null ? 'muted' : dir}`}>
-                      {card.pnl != null ? `${card.pnl >= 0 ? '+' : ''}$${fmtD(Math.abs(card.pnl))}` : '—'}
-                    </span>
-                  </div>
                 </div>
+
                 <div className="port-card-footer">
+                  <span className={`port-cell-val ${card.pnl == null ? 'muted' : dir}`}>
+                    {card.pnl != null ? `${card.pnl >= 0 ? '+' : ''}$${fmtD(Math.abs(card.pnl))}` : '—'}
+                  </span>
                   <span className={`pnl-badge ${dir}`}>
                     {card.pnlPct != null ? `${card.pnlPct >= 0 ? '+' : ''}${card.pnlPct.toFixed(1)}%` : 'N/A'}
                   </span>

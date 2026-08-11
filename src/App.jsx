@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import Header from './components/Header';
-import TabNav from './components/TabNav';
 import { useToast } from './components/Toast';
 import { useAuth } from './context/AuthContext';
 import { useSettings } from './hooks/useSettings';
@@ -18,9 +17,9 @@ import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
 
 const TAB_PATHS = {
-  catalogue: '/',
+  portfolio: '/',
+  catalogue: '/catalogue',
   watchlist: '/watchlist',
-  portfolio: '/portfolio',
   alerts: '/alerts',
   listings: '/listings',
   settings: '/settings',
@@ -28,7 +27,7 @@ const TAB_PATHS = {
 
 function tabFromPath(pathname) {
   const entry = Object.entries(TAB_PATHS).find(([, path]) => path === pathname);
-  return entry ? entry[0] : 'catalogue';
+  return entry ? entry[0] : 'portfolio';
 }
 
 export default function App() {
@@ -191,15 +190,13 @@ export default function App() {
   return (
     <>
       <Header
-        watchingCount={watchlist.length}
-        listingsCount={listings.length}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
         user={user}
         onLogout={logout}
-        onLogoClick={() => setActiveTab('catalogue')}
+        onLogoClick={() => setActiveTab('portfolio')}
       />
       <main>
-        <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
-
         {activeTab === 'watchlist' && (
           <Watchlist
             watchlist={watchlist}

@@ -17,7 +17,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  background: var(--card-bg, #fff);
+  background: var(--surface, #16161a);
 }
 
 .port-stat-card.pstat-up {
@@ -60,7 +60,7 @@
   border-radius: 10px;
   padding: 1rem;
   margin-bottom: 1.25rem;
-  background: var(--card-bg, #fff);
+  background: var(--surface, #16161a);
 }
 
 .port-chart-label {
@@ -132,35 +132,103 @@
 
 .port-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(6, 1fr);
   gap: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .port-cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .port-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .port-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.75rem;
-  background: var(--card-bg, #fff);
+  border-radius: 12px;
+  background: var(--surface2, #1e1e24);
+  overflow: hidden;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.port-card-header {
+.port-card:hover {
+  transform: translateY(-3px);
+  border-color: #3a3a48;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.port-card-image-wrap {
+  width: 100%;
+  aspect-ratio: 2.5 / 3.5;
+  background: #0a0a0e;
   display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  margin-bottom: 0.6rem;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.port-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform 0.3s ease;
+}
+
+.port-card-image-wrap:hover .port-card-image {
+  transform: scale(1.04);
+}
+
+.port-card-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 2rem;
+  opacity: 0.2;
+}
+
+.port-card-info {
+  padding: 0.6rem 0.65rem 0;
+}
+
+.port-card-set {
+  display: block;
+  font-size: 0.7rem;
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.3rem;
+}
+
+.port-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
 }
 
 .port-card-menu-wrap {
-  position: relative;
-  margin-left: auto;
-  flex-shrink: 0;
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 5;
 }
 
 .port-card-menu-btn {
   border: 1px solid transparent;
-  background: none;
-  color: var(--muted, #888);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  color: #fff;
   font-size: 1.1rem;
   line-height: 1;
   padding: 0.15rem 0.4rem;
@@ -169,8 +237,7 @@
 }
 
 .port-card-menu-btn:hover {
-  border-color: var(--border);
-  color: inherit;
+  background: rgba(0, 0, 0, 0.75);
 }
 
 .port-card-menu {
@@ -206,19 +273,6 @@
 .port-card-menu button.port-card-menu-danger {
   color: #f87171;
   border-top: 1px solid var(--border);
-}
-
-.port-tcg-img {
-  width: 48px;
-  height: 67px;
-  object-fit: cover;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: transform 0.15s ease;
-}
-
-.port-tcg-img:hover {
-  transform: scale(1.05);
 }
 
 .port-preview-overlay {
@@ -289,29 +343,28 @@
 
 .port-card-name {
   font-weight: 700;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .port-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.72rem;
-  opacity: 0.6;
-  margin-top: 0.15rem;
+  margin-top: 0.2rem;
 }
 
-.port-card-body {
+.port-card-stats {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 0.4rem;
-  margin-bottom: 0.6rem;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  padding: 0.6rem 0.65rem;
 }
 
 .port-cell {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
+  min-width: 0;
 }
 
 .port-cell-lbl {
@@ -434,6 +487,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  padding: 0 0.65rem 0.65rem;
+  margin-top: -0.15rem;
+}
+
+.port-card-footer .port-cell-val {
+  font-size: 0.8rem;
 }
 
 .pnl-badge {

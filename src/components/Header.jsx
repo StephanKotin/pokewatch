@@ -1,7 +1,8 @@
 import React from 'react';
+import TabNav from './TabNav';
 import './Header.css';
 
-export default function Header({ watchingCount, listingsCount, user, onLogout, onLogoClick }) {
+export default function Header({ activeTab, onTabChange, user, onLogout, onLogoClick }) {
   return (
     <header className="app-header">
       <a
@@ -12,43 +13,27 @@ export default function Header({ watchingCount, listingsCount, user, onLogout, o
           onLogoClick();
         }}
       >
-        Poke<span>Watch</span>
+        Poke<span>Watch</span> &#128064;
       </a>
-      <div className="header-stats">
-        <div className="stat-pill">
-          <b>{watchingCount}</b> watching
+
+      <TabNav activeTab={activeTab} onTabChange={onTabChange} />
+
+      {user && (
+        <div className="header-account">
+          <button
+            className={`settings-icon-btn${activeTab === 'settings' ? ' active' : ''}`}
+            onClick={() => onTabChange('settings')}
+            title="Settings"
+            aria-label="Settings"
+          >
+            &#9881;
+          </button>
+          <span className="header-email">{user.email}</span>
+          <button className="header-signout-btn" onClick={onLogout}>
+            Sign Out
+          </button>
         </div>
-        <div className="stat-pill">
-          <b>{listingsCount}</b> listings
-        </div>
-        <div className="stat-pill">
-          <span className="pulse-dot" />
-          <b>Live</b>
-        </div>
-        {user && (
-          <>
-            <div className="stat-pill" style={{ color: 'var(--muted)', fontSize: 12 }}>
-              {user.email}
-            </div>
-            <button
-              className="stat-pill"
-              onClick={onLogout}
-              style={{
-                cursor: 'pointer',
-                background: 'rgba(230, 57, 70, 0.15)',
-                border: '1px solid var(--red)',
-                color: 'var(--red)',
-                fontSize: 12,
-                padding: '6px 12px',
-                borderRadius: 20,
-                fontFamily: "'DM Sans', sans-serif",
-              }}
-            >
-              Sign Out
-            </button>
-          </>
-        )}
-      </div>
+      )}
     </header>
   );
 }

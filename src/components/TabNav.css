@@ -1,24 +1,18 @@
 .tabs {
   display: flex;
   gap: 4px;
-  margin-bottom: 32px;
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 64px; /* sits flush beneath .app-header, which is sticky at top: 0 */
-  z-index: 9;
-  background: rgba(13, 13, 15, 0.92);
-  backdrop-filter: blur(12px);
+  align-items: center;
+  height: 100%;
 }
 .tab {
   font-family: 'DM Mono', monospace;
   font-size: 13px;
-  padding: 10px 20px;
+  padding: 8px 16px;
   border: none;
   background: none;
   color: var(--muted);
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
   transition: all 0.2s;
   letter-spacing: 0.5px;
 }
@@ -35,4 +29,10 @@
   margin-left: 3px;
   vertical-align: super;
   letter-spacing: 0.3px;
+}
+
+@media (max-width: 720px) {
+  .tabs {
+    display: none;
+  }
 }

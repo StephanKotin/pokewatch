@@ -18,30 +18,15 @@
   gap: 0.75rem;
 }
 
-.cat-search-wrap {
-  position: relative;
-}
-
-.cat-search-wrap input {
-  padding-left: 2rem;
-}
-
-.cat-search-icon {
-  position: absolute;
-  left: 0.5rem;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 0.85rem;
-  opacity: 0.5;
-  pointer-events: none;
-}
-
 .cat-lang-tabs {
   display: flex;
   gap: 2px;
 }
 
 .cat-lang-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.35rem 0.75rem;
   border: 1px solid var(--border);
   background: transparent;
@@ -53,9 +38,25 @@
 }
 
 .cat-lang-btn.active {
-  background: var(--accent);
+  background: rgba(249, 225, 0, 0.08);
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+
+.cat-lang-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(255, 159, 28, 0.16);
+  color: #ff9f1c;
+}
+
+.cat-lang-btn.active .cat-lang-badge {
+  background: rgba(255, 255, 255, 0.22);
   color: #fff;
-  border-color: var(--accent);
 }
 
 .cat-era-section {

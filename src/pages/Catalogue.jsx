@@ -15,7 +15,6 @@ const RARITY_FILTERS = [
 
 export default function Catalogue({ watchlist, addCard, portfolio, addItem, toast }) {
   const [lang, setLang] = useState('en');
-  const [search, setSearch] = useState('');
   const [eraFilter, setEraFilter] = useState('all');
   const [modalSet, setModalSet] = useState(null);
   const [modalCards, setModalCards] = useState([]);
@@ -48,10 +47,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
 
   /* ---- filtered & grouped sets ---- */
   const grouped = useMemo(() => {
-    const q = search.toLowerCase();
     const filtered = sets.filter((s) => {
-      if (q && !s.name.toLowerCase().includes(q) && !s.series.toLowerCase().includes(q))
-        return false;
       if (eraFilter !== 'all' && getEra(s.series).key !== eraFilter) return false;
       return true;
     });
@@ -67,7 +63,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
       groups.find((g) => g.era.key === era.key).sets.push(s);
     }
     return groups;
-  }, [sets, search, eraFilter]);
+  }, [sets, eraFilter]);
 
   /* ---- open set modal ---- */
   const openSet = useCallback(
@@ -205,27 +201,19 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
       <div className="cat-header">
         <h2 className="listings-title">Set Catalogue</h2>
         <div className="cat-controls">
-          <div className="cat-search-wrap">
-            <span className="cat-search-icon">&#128269;</span>
-            <input
-              type="text"
-              placeholder="Search sets..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
           <div className="cat-lang-tabs">
             <button
               className={`cat-lang-btn${lang === 'en' ? ' active' : ''}`}
-              onClick={() => { setLang('en'); setEraFilter('all'); setSearch(''); }}
+              onClick={() => { setLang('en'); setEraFilter('all'); }}
             >
-              EN
+              English
             </button>
             <button
               className={`cat-lang-btn${lang === 'jp' ? ' active' : ''}`}
-              onClick={() => { setLang('jp'); setEraFilter('all'); setSearch(''); }}
+              onClick={() => { setLang('jp'); setEraFilter('all'); }}
             >
-              JP
+              Japanese
+              <span className="cat-lang-badge">Coming Soon</span>
             </button>
           </div>
         </div>
@@ -297,7 +285,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
       {grouped.length === 0 && (
         <div className="empty-state">
           <div className="empty-icon">&#128270;</div>
-          <p>No sets match your search.</p>
+          <p>No sets match this filter.</p>
         </div>
       )}
 

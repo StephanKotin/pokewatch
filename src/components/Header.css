@@ -6,7 +6,7 @@
   padding: 0 32px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 32px;
   height: 64px;
   position: sticky;
   top: 0;
@@ -19,49 +19,71 @@
   text-shadow: 2px 2px 0 rgba(249, 225, 0, 0.2);
   text-decoration: none;
   cursor: pointer;
+  flex-shrink: 0;
 }
 .logo span {
   color: var(--text);
 }
-.header-stats {
+
+.header-account {
   display: flex;
-  gap: 24px;
   align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
-.stat-pill {
-  font-family: 'DM Mono', monospace;
-  font-size: 12px;
-  padding: 4px 12px;
-  border-radius: 20px;
+
+.settings-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   border: 1px solid var(--border);
+  background: none;
   color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
 }
-.stat-pill b {
+.settings-icon-btn:hover {
+  border-color: var(--muted);
   color: var(--text);
 }
-.pulse-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 6px var(--green);
-  animation: pulse 2s infinite;
-  display: inline-block;
-  margin-right: 6px;
+.settings-icon-btn.active {
+  border-color: var(--yellow);
+  color: var(--yellow);
 }
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(0.8);
-  }
+
+.header-email {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
 }
+
+.header-signout-btn {
+  cursor: pointer;
+  background: rgba(230, 57, 70, 0.15);
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-family: 'DM Sans', sans-serif;
+  white-space: nowrap;
+}
+.header-signout-btn:hover {
+  background: rgba(230, 57, 70, 0.25);
+}
+
 @media (max-width: 960px) {
   .app-header {
     padding: 0 16px;
+    gap: 16px;
+  }
+  .header-email {
+    display: none;
   }
 }

@@ -2,12 +2,10 @@ import React from 'react';
 import './TabNav.css';
 
 const TABS = [
-  { key: 'catalogue', label: 'Catalogue' },
-  { key: 'watchlist', label: 'Watchlist' },
   { key: 'portfolio', label: 'Portfolio' },
-  { key: 'alerts', label: 'Alerts', beta: true },
+  { key: 'watchlist', label: 'Watchlist' },
+  { key: 'catalogue', label: 'Catalogue' },
   { key: 'listings', label: 'Live Listings', beta: true },
-  { key: 'settings', label: 'Settings', beta: true },
 ];
 
 export default function TabNav({ activeTab, onTabChange }) {

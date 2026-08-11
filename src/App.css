@@ -157,7 +157,7 @@ select option { background: var(--surface2); }
 .cat-search-icon { position: absolute; left: 12px; color: var(--muted); font-size: 18px; pointer-events: none; line-height: 1; }
 .cat-search-wrap input { width: 280px; padding-left: 36px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; padding-top: 10px; padding-bottom: 10px; outline: none; }
 .cat-search-wrap input:focus { border-color: var(--yellow); }
-.era-filters { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.era-filters { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-start; margin-bottom: 28px; }
 .era-btn { font-family: 'DM Mono', monospace; font-size: 10px; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; transition: all .15s; letter-spacing: .5px; }
 .era-btn:hover { color: var(--text); border-color: var(--muted); }
 .era-btn.active { color: var(--yellow); border-color: var(--yellow); background: rgba(249,225,0,.06); }
@@ -230,38 +230,11 @@ select option { background: var(--surface2); }
 .add-modal-actions { display: flex; gap: 10px; margin-top: 20px; }
 .add-modal-actions .btn { flex: 1; }
 
-/* ======== PORTFOLIO ======== */
-.portfolio-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
-.port-stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; position: relative; overflow: hidden; }
-.port-stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:12px 12px 0 0; }
-.port-stat-card.pstat-cost::before  { background: linear-gradient(90deg, var(--muted), #4a4a60); }
-.port-stat-card.pstat-val::before   { background: linear-gradient(90deg, var(--blue), #a78bfa); }
-.port-stat-card.pstat-up::before    { background: linear-gradient(90deg, var(--green), #57cc9977); }
-.port-stat-card.pstat-down::before  { background: linear-gradient(90deg, var(--red), #e6394677); }
-.port-stat-card.pstat-count::before { background: linear-gradient(90deg, var(--yellow), var(--orange)); }
-.port-stat-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 8px; }
-.port-stat-value { font-family: 'Bangers', cursive; font-size: 30px; letter-spacing: 1px; }
-.port-stat-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 4px; }
-.port-chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin-bottom: 32px; }
-.port-chart-label { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 16px; display:flex; justify-content:space-between; align-items:center; }
-.port-section-hdr { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 16px; display:flex; justify-content:space-between; align-items:center; }
-.port-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 16px; margin-bottom: 32px; }
-.port-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; animation: slideIn .3s ease both; transition: border-color .2s, box-shadow .2s; }
-.port-card:hover { border-color: #3a3a48; box-shadow: 0 8px 28px rgba(0,0,0,.4); }
-.port-card-header { padding: 14px 16px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 12px; }
-.port-tcg-img { width: 52px; height: 72px; object-fit: contain; border-radius: 4px; flex-shrink: 0; background: #0a0a0e; }
-.port-card-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; line-height: 1.3; }
-.port-card-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
-.port-card-body { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--border); }
-.port-cell { padding: 10px 14px; border-right: 1px solid var(--border); }
-.port-cell:last-child { border-right: none; }
-.port-cell-lbl { font-family: 'DM Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 4px; }
-.port-cell-val { font-family: 'DM Mono', monospace; font-size: 14px; }
-.port-card-footer { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border); }
-.pnl-badge { font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 10px; border-radius: 4px; }
-.pnl-badge.up   { background: rgba(87,204,153,.15); color: var(--green); }
-.pnl-badge.down { background: rgba(230,57,70,.12);  color: var(--red);   }
-.pnl-badge.flat { background: rgba(107,107,128,.2); color: var(--muted); }
+/* Portfolio page styling lives entirely in Portfolio.css — a legacy
+   duplicate set of .port-* rules used to live here too and was silently
+   winning the cascade over the real styles for anything with matching
+   class names (card grid sizing, stat cards, etc). Removed rather than
+   left to rot again. */
 
 /* ======== ALERTS ======== */
 .alert-config-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin-bottom: 28px; }
@@ -271,6 +244,10 @@ select option { background: var(--surface2); }
 .alert-card.sent   { border-left-color: var(--green); }
 .alert-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .alert-dot.watching { background: var(--yellow); animation: pulse 2s infinite; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
 .alert-dot.fired    { background: var(--red); }
 .alert-dot.sent     { background: var(--green); }
 .alert-info { flex: 1; min-width: 0; }
