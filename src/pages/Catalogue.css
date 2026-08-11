@@ -59,6 +59,39 @@
   color: #fff;
 }
 
+.cat-set-search {
+  margin-left: auto;
+}
+
+.cat-era-section {
+  margin-bottom: 1.5rem;
+}
+
+.cat-era-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.cat-era-title {
+  font-weight: 700;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.cat-era-line {
+  flex: 1;
+  height: 1px;
+  opacity: 0.3;
+}
+
+.cat-era-count {
+  font-size: 0.75rem;
+  opacity: 0.5;
+  white-space: nowrap;
+}
+
 .cat-sets-row {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -85,6 +118,12 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 0.5rem;
+}
+
+.cat-set-logo {
+  max-height: 56px;
+  max-width: 100%;
+  object-fit: contain;
 }
 
 .cat-set-logo-placeholder {

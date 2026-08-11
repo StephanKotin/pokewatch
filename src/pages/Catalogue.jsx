@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { getEra } from '../data/eraMap';
 import { EDITIONS, isEditionEligible } from '../data/editions';
 import { fetchSets, fetchSetCards } from '../api/poketrace';
 import { rarityClass } from '../utils/format';
 import './Catalogue.css';
 
 const RARITY_FILTERS = [
-  { key: 'all', label: 'All' },
   { key: 'holo', label: 'Holo+' },
-  { key: 'ultra', label: 'Ultra Rare' },
   { key: 'secret', label: 'Secret' },
+  { key: 'ultra', label: 'Ultra Rare' },
+  { key: 'all', label: 'All' },
 ];
 
 export default function Catalogue({ watchlist, addCard, portfolio, addItem, toast }) {
   const [lang, setLang] = useState('en');
+  const [eraFilter, setEraFilter] = useState('all');
   const [setSearch, setSetSearch] = useState('');
   const [modalSet, setModalSet] = useState(null);
   const [modalCards, setModalCards] = useState([]);
@@ -43,6 +45,13 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
             id: s.slug,
             name: s.name,
             cardCount: s.cardCount,
+            // Only present when the server matched this set by name against
+            // pokemontcg.io's set list (PokeTrace itself has none of this) —
+            // undefined for anything that didn't match, which just falls
+            // into the "Other Sets" bucket below with no logo.
+            releaseDate: s.releaseDate || null,
+            series: s.series || null,
+            logo: s.logo || null,
             lang,
           }))
         );
@@ -52,16 +61,49 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
     return () => { cancelled = true; };
   }, [lang]);
 
-  // PokeTrace's /sets doesn't return a usable releaseDate (confirmed null
-  // across the catalogue live), so there's no signal left to group sets
-  // into eras — just an alphabetical, searchable list instead. With
-  // hundreds of English sets in PokeTrace's catalogue, a name filter is
-  // the only practical way to find one.
-  const filteredSets = useMemo(() => {
+  // Stable era ordering (most recent era first, "Other Sets" always last),
+  // computed once from the full unfiltered set list so era filter buttons
+  // and grouped section order don't shuffle as the search/era filter change.
+  const eraOrder = useMemo(() => {
+    const eraByKey = new Map();
+    const maxDateByKey = new Map();
+    for (const s of sets) {
+      const era = getEra(s.series);
+      if (!eraByKey.has(era.key)) eraByKey.set(era.key, era);
+      if (s.releaseDate) {
+        const cur = maxDateByKey.get(era.key);
+        if (!cur || s.releaseDate > cur) maxDateByKey.set(era.key, s.releaseDate);
+      }
+    }
+    return [...eraByKey.keys()]
+      .sort((a, b) => {
+        if (a === 'other') return 1;
+        if (b === 'other') return -1;
+        return (maxDateByKey.get(b) || '').localeCompare(maxDateByKey.get(a) || '');
+      })
+      .map((k) => eraByKey.get(k));
+  }, [sets]);
+
+  /* ---- filtered & grouped sets, most-recent-first within each era ---- */
+  const grouped = useMemo(() => {
     const q = setSearch.trim().toLowerCase();
-    const filtered = q ? sets.filter((s) => s.name.toLowerCase().includes(q)) : sets;
-    return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
-  }, [sets, setSearch]);
+    const filtered = sets.filter((s) => {
+      if (q && !s.name.toLowerCase().includes(q)) return false;
+      if (eraFilter !== 'all' && getEra(s.series).key !== eraFilter) return false;
+      return true;
+    });
+
+    const byKey = new Map();
+    for (const s of filtered) {
+      const era = getEra(s.series);
+      if (!byKey.has(era.key)) byKey.set(era.key, { era, sets: [] });
+      byKey.get(era.key).sets.push(s);
+    }
+    for (const g of byKey.values()) {
+      g.sets.sort((a, b) => (b.releaseDate || '').localeCompare(a.releaseDate || '') || a.name.localeCompare(b.name));
+    }
+    return eraOrder.filter((era) => byKey.has(era.key)).map((era) => byKey.get(era.key));
+  }, [sets, eraFilter, setSearch, eraOrder]);
 
   /* ---- open set modal ---- */
   const openSet = useCallback(
@@ -197,7 +239,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
             </button>
             <button
               className={`cat-lang-btn${lang === 'jp' ? ' active' : ''}`}
-              onClick={() => setLang('jp')}
+              onClick={() => { setLang('jp'); setEraFilter('all'); }}
             >
               Japanese
               <span className="cat-lang-badge">Coming Soon</span>
@@ -206,9 +248,25 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
         </div>
       </div>
 
-      {/* ---- set search ---- */}
+      {/* ---- era filters + set search ---- */}
       <div className="era-filters">
-        <div className="modal-search-wrap">
+        <button
+          className={`era-btn${eraFilter === 'all' ? ' active' : ''}`}
+          onClick={() => setEraFilter('all')}
+        >
+          All Eras
+        </button>
+        {eraOrder.map((era) => (
+          <button
+            key={era.key}
+            className={`era-btn${eraFilter === era.key ? ' active' : ''}`}
+            style={eraFilter === era.key ? { borderColor: era.color, color: era.color } : {}}
+            onClick={() => setEraFilter(era.key)}
+          >
+            {era.label}
+          </button>
+        ))}
+        <div className="modal-search-wrap cat-set-search">
           <input
             type="text"
             placeholder="Search sets..."
@@ -218,37 +276,61 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
         </div>
       </div>
 
-      {/* ---- set grid ---- */}
+      {/* ---- grouped sets, most recent era first ---- */}
       {setsLoading && (
         <div className="modal-loading">
           <div className="scan-spinner" />
           Loading sets...
         </div>
       )}
-      {!setsLoading && filteredSets.length > 0 && (
-        <div className="cat-sets-row">
-          {filteredSets.map((s) => (
-            <div key={s.id} className="cat-set-card" onClick={() => openSet(s)}>
-              <div className="cat-set-img-wrap">
-                <div className="cat-set-logo-placeholder">
-                  {s.name.slice(0, 2).toUpperCase()}
+      {!setsLoading && grouped.map((group) => (
+        <section key={group.era.key} className="cat-era-section">
+          <div className="cat-era-heading">
+            <span className="cat-era-title" style={{ color: group.era.color }}>
+              {group.era.label}
+            </span>
+            <span className="cat-era-line" style={{ backgroundColor: group.era.color }} />
+            <span className="cat-era-count">{group.sets.length} sets</span>
+          </div>
+          <div className="cat-sets-row">
+            {group.sets.map((s) => (
+              <div key={s.id} className="cat-set-card" onClick={() => openSet(s)}>
+                <div className="cat-set-img-wrap">
+                  {s.logo && (
+                    <img
+                      className="cat-set-logo"
+                      src={s.logo}
+                      alt={s.name}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextSibling && (e.target.nextSibling.style.display = 'flex');
+                      }}
+                    />
+                  )}
+                  <div
+                    className="cat-set-logo-placeholder"
+                    style={s.logo ? { display: 'none' } : undefined}
+                  >
+                    {s.name.slice(0, 2).toUpperCase()}
+                  </div>
+                </div>
+                <div className="cat-set-info">
+                  <div className="cat-set-name">
+                    {s.name}
+                    {s.lang === 'jp' && <span className="jp-badge">JP</span>}
+                  </div>
+                  <div className="cat-set-meta">
+                    {s.releaseDate && <span className="cat-set-date">{s.releaseDate.slice(0, 4)}</span>}
+                    <span className="cat-set-count">{s.cardCount} cards</span>
+                  </div>
                 </div>
               </div>
-              <div className="cat-set-info">
-                <div className="cat-set-name">
-                  {s.name}
-                  {s.lang === 'jp' && <span className="jp-badge">JP</span>}
-                </div>
-                <div className="cat-set-meta">
-                  <span className="cat-set-count">{s.cardCount} cards</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        </section>
+      ))}
 
-      {!setsLoading && filteredSets.length === 0 && (
+      {!setsLoading && grouped.length === 0 && (
         <div className="empty-state">
           <div className="empty-icon">&#128270;</div>
           <p>No sets match this filter.</p>
@@ -260,12 +342,29 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
         <div className="modal-overlay" onClick={() => setModalSet(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <div className="cat-set-logo-placeholder">
+              {modalSet.logo && (
+                <img
+                  className="modal-set-logo"
+                  src={modalSet.logo}
+                  alt=""
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling && (e.target.nextSibling.style.display = 'flex');
+                  }}
+                />
+              )}
+              <div
+                className="cat-set-logo-placeholder"
+                style={modalSet.logo ? { display: 'none' } : undefined}
+              >
                 {modalSet.name.slice(0, 2).toUpperCase()}
               </div>
               <div>
                 <h3 className="modal-set-name">{modalSet.name}</h3>
-                <p className="modal-set-sub">{modalSet.cardCount} cards</p>
+                <p className="modal-set-sub">
+                  {modalSet.releaseDate && <>{modalSet.releaseDate} &middot; </>}
+                  {modalSet.cardCount} cards
+                </p>
               </div>
               <button className="modal-close" onClick={() => setModalSet(null)}>
                 &times;

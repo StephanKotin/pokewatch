@@ -147,6 +147,64 @@ async function fetchPokemonTcgIoPrice(cardId, attempt = 1) {
   }
 }
 
+// PokeTrace's own Set object has no releaseDate/series/logo (confirmed live:
+// releaseDate is null on every entry, for every game value — there is
+// nothing to fall back to). pokemontcg.io's public set list has exactly
+// those fields, so it's used here purely as read-only display metadata,
+// matched onto PokeTrace's sets by (normalized) name — PokeTrace remains
+// the source of truth for which sets/cards exist. Cached much longer on
+// success than on failure so one flaky moment (see the note above
+// fetchPokemonTcgIoPrice) doesn't strand the catalogue without era/date
+// data for a full day.
+const POKEMONTCGIO_SETS_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60;
+const POKEMONTCGIO_SETS_RETRY_CACHE_MAX_AGE_SECONDS = 5 * 60;
+let pokemonTcgIoSetsCache = null; // { byName: Map<normalizedName, meta>, cachedAt, ok }
+
+async function fetchPokemonTcgIoSets(attempt = 1) {
+  const MAX_ATTEMPTS = 3;
+  try {
+    const headers = { 'User-Agent': 'pokewatch/1.0' };
+    if (POKEMONTCGIO_API_KEY) headers['X-Api-Key'] = POKEMONTCGIO_API_KEY;
+    const response = await fetch(`${POKEMONTCGIO_BASE}/sets?pageSize=250`, { headers });
+    if (!response.ok) {
+      if (response.status >= 500 && attempt < MAX_ATTEMPTS) {
+        await sleep(400 * attempt);
+        return fetchPokemonTcgIoSets(attempt + 1);
+      }
+      return null;
+    }
+    const { data } = await response.json();
+    return data || [];
+  } catch (e) {
+    if (attempt < MAX_ATTEMPTS) {
+      await sleep(400 * attempt);
+      return fetchPokemonTcgIoSets(attempt + 1);
+    }
+    console.warn('[pokemontcgio] set list fetch failed:', e.message);
+    return null;
+  }
+}
+
+async function getPokemonTcgIoSetsByName() {
+  const maxAge = pokemonTcgIoSetsCache?.ok
+    ? POKEMONTCGIO_SETS_CACHE_MAX_AGE_SECONDS
+    : POKEMONTCGIO_SETS_RETRY_CACHE_MAX_AGE_SECONDS;
+  if (pokemonTcgIoSetsCache && (Date.now() - pokemonTcgIoSetsCache.cachedAt) / 1000 < maxAge) {
+    return pokemonTcgIoSetsCache.byName;
+  }
+  const sets = await fetchPokemonTcgIoSets();
+  const byName = new Map();
+  for (const s of sets || []) {
+    byName.set(normalizeSetName(s.name), {
+      releaseDate: s.releaseDate ? s.releaseDate.replace(/\//g, '-') : null,
+      series: s.series || null,
+      logo: s.images?.logo || null,
+    });
+  }
+  pokemonTcgIoSetsCache = { byName, cachedAt: Date.now(), ok: !!sets };
+  return byName;
+}
+
 // Looks up a card's price via PokeTrace (real per-condition eBay/TCGPlayer
 // comps); if it has no Near Mint quote and a real card id is known, fills
 // that gap from pokemontcg.io. Returns a card shaped like PokeTrace's own
@@ -216,6 +274,31 @@ async function resolvePokeTraceCard(name, set, edition, number) {
     console.warn('[poketrace] card resolution failed:', e.message);
     return null;
   }
+}
+
+// resolvePokeTraceCard does a live PokeTrace search every time it's called —
+// fine for /api/prices, which only reaches it on a genuine snapshot-cache
+// miss (needs fresh live numbers), but /api/price-history was calling it
+// unconditionally on *every* request just to find the card's id, before
+// even checking its own history cache below. Confirmed live: with a ~200-
+// item portfolio, that's ~200 unnecessary PokeTrace searches serialized
+// through the rate-limit queue on every single page load/refresh — 40
+// sample items took ~8s wall time for this reason alone. A card's identity
+// doesn't change, so just the id lookup (not the live price data) is safe
+// to cache far longer than the history data itself.
+const CARD_ID_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60;
+const cardIdCache = new Map(); // `${name}|${set}|${edition}|${number}` -> { cardId, cachedAt }
+
+async function resolveCardId(name, set, edition, number) {
+  const key = [name, set || '', edition || '', number || ''].join('|').toLowerCase();
+  const cached = cardIdCache.get(key);
+  if (cached && (Date.now() - cached.cachedAt) / 1000 < CARD_ID_CACHE_MAX_AGE_SECONDS) {
+    return cached.cardId;
+  }
+  const card = await resolvePokeTraceCard(name, set, edition, number);
+  const cardId = card?.id || null;
+  cardIdCache.set(key, { cardId, cachedAt: Date.now() });
+  return cardId;
 }
 
 async function lookupCardPrices(name, set, realCardId, edition, number) {
@@ -569,17 +652,17 @@ app.get('/api/price-history', async (req, res) => {
   const gradeKey = PRICE_CONDITIONS[grade] ? grade : 'nm';
   const tier = PRICE_CONDITIONS[gradeKey];
   try {
-    const card = await resolvePokeTraceCard(name, set, edition, number);
-    if (!card) return res.json([]);
+    const cardId = await resolveCardId(name, set, edition, number);
+    if (!cardId) return res.json([]);
 
-    const cacheKey = `${card.id}|${tier}`;
+    const cacheKey = `${cardId}|${tier}`;
     const cached = priceHistoryCache.get(cacheKey);
     if (cached && (Date.now() - cached.cachedAt) / 1000 < PRICE_HISTORY_CACHE_MAX_AGE_SECONDS) {
       return res.json(cached.data);
     }
 
     const params = new URLSearchParams({ period: PRICE_HISTORY_PERIOD, limit: '100' });
-    const response = await pokeTraceFetch(`${POKETRACE_BASE}/cards/${card.id}/prices/${tier}/history?${params}`);
+    const response = await pokeTraceFetch(`${POKETRACE_BASE}/cards/${cardId}/prices/${tier}/history?${params}`);
     if (!response.ok) return res.json([]);
     const { data: rows } = await response.json();
     const mapped = (rows || [])
@@ -661,6 +744,19 @@ app.get('/api/sets', async (req, res) => {
       all = all.concat(data || []);
       cursor = pagination?.hasMore ? pagination.nextCursor : null;
     } while (cursor);
+
+    // Enrich with releaseDate/series/logo from pokemontcg.io where a set's
+    // name matches — see getPokemonTcgIoSetsByName. pokemontcg.io's public
+    // set list is English-only, so Japanese sets are left as-is (no era
+    // grouping/logo for those, same as any PokeTrace set with no match).
+    if (game === 'pokemon') {
+      const metaByName = await getPokemonTcgIoSetsByName();
+      all = all.map((s) => {
+        const meta = metaByName.get(normalizeSetName(s.name));
+        return meta ? { ...s, releaseDate: meta.releaseDate, series: meta.series, logo: meta.logo } : s;
+      });
+    }
+
     setsCache.set(game, { data: all, cachedAt: Date.now() });
     res.json(all);
   } catch (e) {
