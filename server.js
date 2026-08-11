@@ -173,6 +173,16 @@ function findBestSetMatch(results, wantedSet) {
   return partial || results[0] || null;
 }
 
+// PokeTrace formats cardNumber as "198/193" (numerator/set-total, zero
+// padded); we store the bare numerator ("198"). Comparing those directly
+// never matches, silently defeating the number-match safeguard below on
+// every single card — confirmed live: "Bramblin" in Paldea Evolved exists
+// as both 022/193 (Common) and 198/193 (Illustration Rare), and the broken
+// comparison was letting a rare card's price fall back to the common one.
+function normalizePokeTraceNumber(n) {
+  return (n || '').split('/')[0].trim().replace(/^0+(?=\d)/, '');
+}
+
 // Set-name matching alone isn't enough to pick the right card: promo sets in
 // particular reuse the same card name across many different numbered prints
 // (e.g. "Vaporeon V" appears as both SWSH150 and SWSH181 in the same "Sword &
@@ -182,7 +192,8 @@ function findBestSetMatch(results, wantedSet) {
 // and only falls back to fuzzy set-name matching when we don't have one.
 function findBestCardMatch(results, wantedSet, wantedNumber) {
   if (wantedNumber) {
-    const exact = results.find((c) => c.cardNumber === wantedNumber);
+    const wantedNorm = normalizePokeTraceNumber(wantedNumber);
+    const exact = results.find((c) => normalizePokeTraceNumber(c.cardNumber) === wantedNorm);
     if (exact) return exact;
   }
   return findBestSetMatch(results, wantedSet);
