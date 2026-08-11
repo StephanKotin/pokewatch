@@ -21,7 +21,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
   const [modalCards, setModalCards] = useState([]);
   const [modalLoading, setModalLoading] = useState(false);
   const [modalSearch, setModalSearch] = useState('');
-  const [rarityFilter, setRarityFilter] = useState('all');
+  const [rarityFilter, setRarityFilter] = useState('holo');
   const [addTarget, setAddTarget] = useState(null);
   const [addMode, setAddMode] = useState('watchlist');
   const [addCondition, setAddCondition] = useState('Near Mint');
@@ -126,7 +126,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
       setModalSet(set);
       setModalCards([]);
       setModalSearch('');
-      setRarityFilter('all');
+      setRarityFilter('holo');
       setModalLoading(true);
       try {
         const cards = await fetchSetCards(set.id);
@@ -168,7 +168,7 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
         return true;
       });
     }
-    return cards;
+    return [...cards].sort((a, b) => parseFloat(b.number) - parseFloat(a.number) || b.number.localeCompare(a.number));
   }, [modalCards, modalSearch, rarityFilter]);
 
   /* ---- watchlist lookup ---- */
