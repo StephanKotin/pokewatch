@@ -492,6 +492,36 @@ app.put('/api/settings', authenticate, (req, res) => {
 
 // --- Public Routes (shared data, no auth needed) ---
 
+// Restored: this existed earlier, checking price_snapshots for a per-grade
+// row within the cache window before ever calling PokeTrace, so a page load
+// that already has fresh data doesn't re-spend API quota. It got dropped
+// somewhere during the number/edition-matching rework and every /api/prices
+// call was silently hitting PokeTrace live again regardless of age — this
+// is what "store the price once every 24h" is supposed to actually do.
+const PRICE_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60;
+
+function getFreshSnapshot(snapshotId, maxAgeSeconds) {
+  const cutoff = Math.floor(Date.now() / 1000) - maxAgeSeconds;
+  const rows = db
+    .prepare(
+      `SELECT grade, price, low, high, MAX(captured_at) AS captured_at
+       FROM price_snapshots
+       WHERE card_id = ? AND captured_at >= ?
+       GROUP BY grade`
+    )
+    .all(snapshotId, cutoff);
+  return rows.length ? rows : null;
+}
+
+function cardFromSnapshotRows(id, name, rows) {
+  const prices = {};
+  for (const row of rows) {
+    const field = PRICE_CONDITIONS[row.grade];
+    if (field) prices[field] = { avg: row.price, low: row.low, high: row.high };
+  }
+  return { id, name, prices: { tcgplayer: prices } };
+}
+
 app.get('/api/prices', async (req, res) => {
   const { name, set, cardId, edition, number } = req.query;
   if (!name) return res.status(400).json({ error: 'name required' });
@@ -500,6 +530,11 @@ app.get('/api/prices', async (req, res) => {
     // collectibles with very different prices — keep their snapshots apart.
     const editionSuffix = edition && edition !== 'Unlimited' ? '-1st' : '';
     const snapshotId = (cardId || name).toLowerCase() + editionSuffix;
+
+    const cached = getFreshSnapshot(snapshotId, PRICE_CACHE_MAX_AGE_SECONDS);
+    if (cached) {
+      return res.json({ data: [cardFromSnapshotRows(cardId || null, name, cached)] });
+    }
 
     const { card, fallbackSource } = await lookupCardPrices(name, set, cardId, edition, number);
     if (card && card.prices) {
