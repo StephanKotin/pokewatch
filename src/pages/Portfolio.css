@@ -528,10 +528,41 @@
   color: #f9e100;
 }
 
+.tag-graded {
+  background: rgba(76, 201, 240, 0.14) !important;
+  color: #4cc9f0;
+}
+
 .tag {
   background: var(--border);
   padding: 1px 6px;
   border-radius: 4px;
   font-size: 0.68rem;
   font-weight: 600;
+}
+
+/* Add/edit modal mode tabs (mirrors Catalogue.css's .add-mode-tabs) */
+.add-mode-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 0.75rem;
+}
+
+.add-mode-btn {
+  flex: 1;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.add-mode-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb, 59, 130, 246), 0.08);
 }

@@ -24,6 +24,9 @@ export function usePortfolio() {
               number: row.number || null,
               setId: row.set_id || null,
               edition: row.edition || null,
+              isGraded: !!row.is_graded,
+              gradeTier: row.grade_tier || null,
+              gradeLabel: row.grade_label || null,
             }))
           );
         }
@@ -58,6 +61,9 @@ export function usePortfolio() {
       number: item.number || null,
       set_id: item.setId || null,
       edition: item.edition || null,
+      is_graded: !!item.isGraded,
+      grade_tier: item.gradeTier || null,
+      grade_label: item.gradeLabel || null,
     }).catch((e) => console.warn('Failed to sync portfolio:', e.message));
   }, []);
 

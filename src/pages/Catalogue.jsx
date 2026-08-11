@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { getEra } from '../data/eraMap';
 import { EDITIONS, isEditionEligible } from '../data/editions';
-import { fetchSets, fetchSetCards } from '../api/poketrace';
+import { fetchSets, fetchSetCards, fetchCardGrades } from '../api/poketrace';
+import { formatGradeTier } from '../data/grades';
 import { rarityClass } from '../utils/format';
 import './Catalogue.css';
 
@@ -29,6 +30,10 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
   const [addPurchasePrice, setAddPurchasePrice] = useState('');
   const [addPurchaseDate, setAddPurchaseDate] = useState('');
   const [addNotes, setAddNotes] = useState('');
+  const [addGraded, setAddGraded] = useState(false);
+  const [addGradeTier, setAddGradeTier] = useState('');
+  const [gradeOptions, setGradeOptions] = useState([]);
+  const [gradeOptionsLoading, setGradeOptionsLoading] = useState(false);
 
   const [sets, setSets] = useState([]);
   const [setsLoading, setSetsLoading] = useState(true);
@@ -178,7 +183,29 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
     setAddPurchasePrice('');
     setAddPurchaseDate('');
     setAddNotes('');
+    setAddGraded(false);
+    setAddGradeTier('');
+    setGradeOptions([]);
   };
+
+  // Graded-tier options are discovered live per card from PokeTrace (see
+  // fetchCardGrades) rather than guessed — PokeTrace only documents grading
+  // *company* names (PSA/BGS/...), not the exact tier-string values.
+  useEffect(() => {
+    if (addMode !== 'portfolio' || !addGraded || !addTarget) {
+      setGradeOptions([]);
+      return;
+    }
+    let cancelled = false;
+    setGradeOptionsLoading(true);
+    fetchCardGrades(addTarget.id)
+      .then((res) => {
+        if (!cancelled) setGradeOptions(res?.gradedOptions || []);
+      })
+      .catch(() => { if (!cancelled) setGradeOptions([]); })
+      .finally(() => { if (!cancelled) setGradeOptionsLoading(false); });
+    return () => { cancelled = true; };
+  }, [addMode, addGraded, addTarget]);
 
   const editionEligible = modalSet ? isEditionEligible(modalSet.name) : false;
 
@@ -212,8 +239,11 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
         number: addTarget.number,
         rarity: addTarget.rarity || '',
         image: addTarget.image || '',
-        condition: addCondition,
+        condition: addGraded ? null : addCondition,
         edition,
+        isGraded: addGraded,
+        gradeTier: addGraded ? addGradeTier || null : null,
+        gradeLabel: addGraded && addGradeTier ? formatGradeTier(addGradeTier) : null,
         purchasePrice: addPurchasePrice ? parseFloat(addPurchasePrice) : null,
         purchaseDate: addPurchaseDate || null,
         notes: addNotes,
@@ -485,16 +515,53 @@ export default function Catalogue({ watchlist, addCard, portfolio, addItem, toas
               </button>
             </div>
 
-            <div className="form-group">
-              <label>Condition</label>
-              <select value={addCondition} onChange={(e) => setAddCondition(e.target.value)}>
-                <option>Near Mint</option>
-                <option>Lightly Played</option>
-                <option>Mod. Played</option>
-                <option>Heavily Played</option>
-                <option>Damaged</option>
-              </select>
-            </div>
+            {addMode === 'portfolio' && (
+              <div className="add-mode-tabs">
+                <button
+                  type="button"
+                  className={`add-mode-btn${!addGraded ? ' active' : ''}`}
+                  onClick={() => { setAddGraded(false); setAddGradeTier(''); }}
+                >
+                  Raw
+                </button>
+                <button
+                  type="button"
+                  className={`add-mode-btn${addGraded ? ' active' : ''}`}
+                  onClick={() => setAddGraded(true)}
+                >
+                  Graded
+                </button>
+              </div>
+            )}
+
+            {addMode === 'portfolio' && addGraded ? (
+              <div className="form-group">
+                <label>Grade</label>
+                {gradeOptionsLoading ? (
+                  <div className="form-hint">Loading available grades…</div>
+                ) : gradeOptions.length ? (
+                  <select value={addGradeTier} onChange={(e) => setAddGradeTier(e.target.value)}>
+                    <option value="">Select a grade…</option>
+                    {gradeOptions.map((tier) => (
+                      <option key={tier} value={tier}>{formatGradeTier(tier)}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="form-hint">No graded price data available for this card yet.</div>
+                )}
+              </div>
+            ) : (
+              <div className="form-group">
+                <label>Condition</label>
+                <select value={addCondition} onChange={(e) => setAddCondition(e.target.value)}>
+                  <option>Near Mint</option>
+                  <option>Lightly Played</option>
+                  <option>Mod. Played</option>
+                  <option>Heavily Played</option>
+                  <option>Damaged</option>
+                </select>
+              </div>
+            )}
 
             {editionEligible && (
               <div className="form-group">

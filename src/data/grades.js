@@ -21,3 +21,14 @@ export const CONDITION_TO_GRADE = {
   'Heavily Played': 'hp',
   'Damaged': 'dmg',
 };
+
+// Formats a raw PokeTrace graded-tier string for display. Confirmed live
+// against /cards/{id}'s gradedOptions: half-grades are a second underscored
+// segment ("BGS_9_5" for BGS 9.5), not a decimal, so joining everything
+// after the company with dots ("PSA_10" -> "PSA 10", "BGS_9_5" -> "BGS 9.5")
+// is required — a naive underscore-to-space replace would render "BGS 9 5".
+export function formatGradeTier(tier) {
+  if (!tier) return '';
+  const [company, ...rest] = tier.split('_');
+  return rest.length ? `${company} ${rest.join('.')}` : company;
+}

@@ -399,6 +399,9 @@ try { db.exec("ALTER TABLE portfolio ADD COLUMN image TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE portfolio ADD COLUMN number TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE portfolio ADD COLUMN set_id TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE portfolio ADD COLUMN edition TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE portfolio ADD COLUMN is_graded INTEGER DEFAULT 0"); } catch(e) {}
+try { db.exec("ALTER TABLE portfolio ADD COLUMN grade_tier TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE portfolio ADD COLUMN grade_label TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE alerts ADD COLUMN user_id TEXT"); } catch(e) {}
 // Existing accounts (created before approval-gating existed) default to
 // 'approved' so nobody already using the app gets locked out retroactively.
@@ -596,17 +599,22 @@ function getFreshSnapshot(snapshotId, maxAgeSeconds) {
   return rows.length ? rows : null;
 }
 
+// Raw conditions are stored under their short key (nm/lp/...) and translated
+// back to PokeTrace's full tier name via PRICE_CONDITIONS. Graded tiers have
+// no short key — they're stored under their real PokeTrace tier string
+// (e.g. "PSA_10") directly, so passing that value straight through here is
+// correct as-is rather than a fallback.
 function cardFromSnapshotRows(id, name, rows) {
   const prices = {};
   for (const row of rows) {
-    const field = PRICE_CONDITIONS[row.grade];
-    if (field) prices[field] = { avg: row.price, low: row.low, high: row.high };
+    const field = PRICE_CONDITIONS[row.grade] || row.grade;
+    prices[field] = { avg: row.price, low: row.low, high: row.high };
   }
   return { id, name, prices: { tcgplayer: prices } };
 }
 
 app.get('/api/prices', async (req, res) => {
-  const { name, set, cardId, edition, number } = req.query;
+  const { name, set, cardId, edition, number, gradeTier } = req.query;
   if (!name) return res.status(400).json({ error: 'name required' });
   try {
     // 1st Edition and Unlimited copies of the same card_id are different
@@ -615,7 +623,12 @@ app.get('/api/prices', async (req, res) => {
     const snapshotId = (cardId || name).toLowerCase() + editionSuffix;
 
     const cached = getFreshSnapshot(snapshotId, PRICE_CACHE_MAX_AGE_SECONDS);
-    if (cached) {
+    // A cache hit only covers what it actually contains — if this request
+    // wants a graded tier that hasn't been snapshotted yet (e.g. the first
+    // time this card is looked up as graded), the raw-only cache from an
+    // earlier request isn't enough and still needs a live fetch to fill it.
+    const cachedHasGradeTier = !gradeTier || (cached && cached.some((r) => r.grade === gradeTier));
+    if (cached && cachedHasGradeTier) {
       return res.json({ data: [cardFromSnapshotRows(cardId || null, name, cached)] });
     }
 
@@ -629,6 +642,10 @@ app.get('/api/prices', async (req, res) => {
           const label = field === 'NEAR_MINT' && fallbackSource ? fallbackSource : 'poketrace';
           insert.run(snapshotId, key, p.avg, p.low || null, p.high || null, label);
         }
+      }
+      if (gradeTier) {
+        const gp = src[gradeTier];
+        if (gp && gp.avg) insert.run(snapshotId, gradeTier, gp.avg, gp.low || null, gp.high || null, 'poketrace');
       }
     }
     res.json({ data: card ? [card] : [] });
@@ -647,10 +664,13 @@ const PRICE_HISTORY_CACHE_MAX_AGE_SECONDS = 6 * 60 * 60;
 const priceHistoryCache = new Map(); // `${cardId}|${tier}` -> { data, cachedAt }
 
 app.get('/api/price-history', async (req, res) => {
-  const { name, set, edition, grade, number } = req.query;
+  const { name, set, edition, grade, number, gradeTier } = req.query;
   if (!name) return res.status(400).json({ error: 'name required' });
-  const gradeKey = PRICE_CONDITIONS[grade] ? grade : 'nm';
-  const tier = PRICE_CONDITIONS[gradeKey];
+  // Graded tiers (e.g. "PSA_10") are already PokeTrace's real tier string —
+  // used as-is. Raw requests go through the short-key -> tier-name map,
+  // defaulting to nm/NEAR_MINT for anything unrecognized.
+  const gradeKey = gradeTier || (PRICE_CONDITIONS[grade] ? grade : 'nm');
+  const tier = gradeTier || PRICE_CONDITIONS[gradeKey];
   try {
     const cardId = await resolveCardId(name, set, edition, number);
     if (!cardId) return res.json([]);
@@ -808,6 +828,34 @@ app.get('/api/cards/search', async (req, res) => {
   }
 });
 
+// PokeTrace doesn't publish a fixed list of graded tier strings (grading
+// company names like PSA/BGS/CGC are documented, but not the exact per-card
+// tier keys, e.g. "PSA_10") — they only exist per-card, in /cards/{id}'s
+// gradedOptions field. So availability has to be discovered live per card
+// rather than guessed/constructed client-side. Cached the same as
+// priceHistoryCache since a card's set of graded tiers changes rarely.
+const CARD_DETAIL_CACHE_MAX_AGE_SECONDS = 6 * 60 * 60;
+const cardDetailCache = new Map(); // cardId -> { data, cachedAt }
+
+app.get('/api/cards/:id/grades', async (req, res) => {
+  const { id } = req.params;
+  const cached = cardDetailCache.get(id);
+  if (cached && (Date.now() - cached.cachedAt) / 1000 < CARD_DETAIL_CACHE_MAX_AGE_SECONDS) {
+    return res.json(cached.data);
+  }
+  try {
+    const response = await pokeTraceFetch(`${POKETRACE_BASE}/cards/${encodeURIComponent(id)}`);
+    if (!response.ok) return res.json({ gradedOptions: [], hasGraded: false });
+    const { data } = await response.json();
+    const result = { gradedOptions: data?.gradedOptions || [], hasGraded: !!data?.hasGraded };
+    cardDetailCache.set(id, { data: result, cachedAt: Date.now() });
+    res.json(result);
+  } catch (e) {
+    console.warn('[grades] lookup failed:', e.message);
+    res.json({ gradedOptions: [], hasGraded: false });
+  }
+});
+
 // --- Protected Routes (user-scoped) ---
 
 app.get('/api/watchlist', authenticate, (req, res) => {
@@ -830,8 +878,8 @@ app.get('/api/portfolio', authenticate, (req, res) => {
 });
 
 app.post('/api/portfolio', authenticate, (req, res) => {
-  const { id, name, set_name, condition, purchase_price, purchase_date, notes, card_id, image, number, set_id, edition } = req.body;
-  db.prepare('INSERT OR REPLACE INTO portfolio (id, name, set_name, condition, purchase_price, purchase_date, notes, card_id, image, number, set_id, edition, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, name, set_name || null, condition || null, purchase_price || null, purchase_date || null, notes || null, card_id || null, image || null, number || null, set_id || null, edition || null, req.userId);
+  const { id, name, set_name, condition, purchase_price, purchase_date, notes, card_id, image, number, set_id, edition, is_graded, grade_tier, grade_label } = req.body;
+  db.prepare('INSERT OR REPLACE INTO portfolio (id, name, set_name, condition, purchase_price, purchase_date, notes, card_id, image, number, set_id, edition, is_graded, grade_tier, grade_label, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, name, set_name || null, condition || null, purchase_price || null, purchase_date || null, notes || null, card_id || null, image || null, number || null, set_id || null, edition || null, is_graded ? 1 : 0, grade_tier || null, grade_label || null, req.userId);
   res.json({ ok: true });
 });
 
@@ -867,7 +915,7 @@ async function scanPrices() {
   }
   for (const item of db.prepare('SELECT * FROM portfolio').all()) {
     const key = keyFor(item.card_id || item.name, item.edition);
-    if (!targets.has(key)) targets.set(key, { name: item.name, set: item.set_name, realCardId: item.card_id || null, edition: item.edition, number: item.number });
+    if (!targets.has(key)) targets.set(key, { name: item.name, set: item.set_name, realCardId: item.card_id || null, edition: item.edition, number: item.number, gradeTier: item.grade_tier || null });
   }
 
   const insert = db.prepare('INSERT INTO price_snapshots (card_id, grade, price, low, high, source) VALUES (?, ?, ?, ?, ?, ?)');
@@ -883,6 +931,10 @@ async function scanPrices() {
           const label = field === 'NEAR_MINT' && fallbackSource ? fallbackSource : 'poketrace';
           insert.run(snapshotId, key, p.avg, p.low || null, p.high || null, label);
         }
+      }
+      if (target.gradeTier) {
+        const gp = src[target.gradeTier];
+        if (gp && gp.avg) insert.run(snapshotId, target.gradeTier, gp.avg, gp.low || null, gp.high || null, 'poketrace');
       }
       const watchlistCard = target.watchlistCard;
       if (watchlistCard && watchlistCard.max_price) {

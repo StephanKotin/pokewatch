@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
-import { GRADES, CONDITION_TO_GRADE, CONDITIONS } from '../data/grades';
-import { extractGradePrice, TCG_CDN, fetchSets, fetchSetCards, searchCards } from '../api/poketrace';
+import { CONDITIONS, formatGradeTier } from '../data/grades';
+import { extractTierPrice, TCG_CDN, fetchSets, fetchSetCards, searchCards, fetchCardGrades } from '../api/poketrace';
 import Sparkline from '../components/Sparkline';
 import {
   rowsFromCSV,
@@ -53,15 +53,28 @@ function getHiResImage(item) {
   return img ? img.replace(/\.png$/, '_hires.png') : null;
 }
 
-// Real quote for the item's condition; falls back to the most recent stored
-// snapshot for that grade. Returns null when no price data exists yet.
+// Graded cards price off their specific graded tier (e.g. "PSA_10"). Raw
+// cards always price off the base ungraded quote regardless of the recorded
+// physical condition — see usePortfolioPrices for why. Live prices need
+// PokeTrace's full tier name; stored history rows are keyed by the short
+// "nm" for raw (to match what /api/price-history returns) or the full
+// graded tier string for graded (also matching what the server returns).
+function priceTierField(item) {
+  return item.isGraded && item.gradeTier ? item.gradeTier : 'NEAR_MINT';
+}
+function historyGradeKey(item) {
+  return item.isGraded && item.gradeTier ? item.gradeTier : 'nm';
+}
+
+// Real quote for the item's tier; falls back to the most recent stored
+// snapshot for that tier. Returns null when no price data exists yet.
 function estimateValue(item, priceEntry) {
-  const gradeKey = CONDITION_TO_GRADE[item.condition] || 'nm';
   if (priceEntry?.live) {
-    const p = extractGradePrice(priceEntry.live, gradeKey, GRADES);
+    const p = extractTierPrice(priceEntry.live, priceTierField(item));
     if (p) return p.avg;
   }
-  const hist = (priceEntry?.history || []).filter((h) => h.grade === gradeKey);
+  const key = historyGradeKey(item);
+  const hist = (priceEntry?.history || []).filter((h) => h.grade === key);
   if (hist.length) return hist[hist.length - 1].price;
   return null;
 }
@@ -73,16 +86,16 @@ function buildChartData(portfolio, priceData) {
     const dayMs = now - i * 86400000;
     let total = 0;
     for (const item of portfolio) {
-      const gradeKey = CONDITION_TO_GRADE[item.condition] || 'nm';
+      const key = historyGradeKey(item);
       const entry = priceData[item.id];
       const hist = (entry?.history || []).filter(
-        (h) => h.grade === gradeKey && h.captured_at * 1000 <= dayMs
+        (h) => h.grade === key && h.captured_at * 1000 <= dayMs
       );
       let value = null;
       if (hist.length) {
         value = hist[hist.length - 1].price;
       } else if (i === 0 && entry?.live) {
-        const p = extractGradePrice(entry.live, gradeKey, GRADES);
+        const p = extractTierPrice(entry.live, priceTierField(item));
         value = p ? p.avg : null;
       }
       total += value != null ? value : item.purchasePrice || 0;
@@ -102,7 +115,35 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
     purchasePrice: '',
     purchaseDate: '',
     notes: '',
+    isGraded: false,
+    gradeTier: '',
+    gradeLabel: '',
   });
+
+  // Graded-tier options are discovered live from PokeTrace per card (see
+  // fetchCardGrades) rather than guessed, since PokeTrace doesn't publish a
+  // fixed tier-string list. Only fetchable once a real cardId is known,
+  // which the plain "Add Card" form here never has (no card search) — it's
+  // only ever available when editing an item that was matched via Catalogue
+  // or CSV import.
+  const [gradeOptions, setGradeOptions] = useState([]);
+  const [gradeOptionsLoading, setGradeOptionsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!showModal || !form.isGraded || !editItem?.cardId) {
+      setGradeOptions([]);
+      return;
+    }
+    let cancelled = false;
+    setGradeOptionsLoading(true);
+    fetchCardGrades(editItem.cardId)
+      .then((res) => {
+        if (!cancelled) setGradeOptions(res?.gradedOptions || []);
+      })
+      .catch(() => { if (!cancelled) setGradeOptions([]); })
+      .finally(() => { if (!cancelled) setGradeOptionsLoading(false); });
+    return () => { cancelled = true; };
+  }, [showModal, form.isGraded, editItem?.cardId]);
 
   /* ---- CSV import ---- */
   const fileInputRef = useRef(null);
@@ -292,7 +333,10 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
   /* ---- modal open ---- */
   const openAdd = () => {
     setEditItem(null);
-    setForm({ name: '', set: '', condition: 'Near Mint', purchasePrice: '', purchaseDate: '', notes: '' });
+    setForm({
+      name: '', set: '', condition: 'Near Mint', purchasePrice: '', purchaseDate: '', notes: '',
+      isGraded: false, gradeTier: '', gradeLabel: '',
+    });
     setShowModal(true);
   };
 
@@ -305,6 +349,9 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
       purchasePrice: item.purchasePrice || '',
       purchaseDate: item.purchaseDate || '',
       notes: item.notes || '',
+      isGraded: !!item.isGraded,
+      gradeTier: item.gradeTier || '',
+      gradeLabel: item.gradeLabel || '',
     });
     setShowModal(true);
   };
@@ -333,6 +380,9 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
       image: card.image || null,
       condition: card.condition,
       edition: card.edition || null,
+      isGraded: !!card.isGraded,
+      gradeTier: card.gradeTier || null,
+      gradeLabel: card.gradeLabel || null,
       purchasePrice: card.purchasePrice || 0,
       purchaseDate: card.purchaseDate || new Date().toISOString().slice(0, 10),
       notes: card.notes || '',
@@ -361,7 +411,10 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
       id: editItem?.id || Date.now().toString(),
       name: form.name,
       set: form.set,
-      condition: form.condition,
+      condition: form.isGraded ? null : form.condition,
+      isGraded: form.isGraded,
+      gradeTier: form.isGraded ? form.gradeTier || null : null,
+      gradeLabel: form.isGraded ? form.gradeLabel || null : null,
       purchasePrice: form.purchasePrice ? parseFloat(form.purchasePrice) : 0,
       purchaseDate: form.purchaseDate || new Date().toISOString().slice(0, 10),
       notes: form.notes,
@@ -529,7 +582,9 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
                   <div className="port-card-meta">
                     {card.set && <span className="port-card-set" title={card.set}>{card.set}</span>}
                     <div className="port-card-tags">
-                      {card.condition && <span className="tag">{card.condition}</span>}
+                      {card.isGraded
+                        ? <span className="tag tag-graded">{card.gradeLabel || formatGradeTier(card.gradeTier)}</span>
+                        : card.condition && <span className="tag">{card.condition}</span>}
                       {card.edition === '1st Edition' && <span className="tag tag-edition">1st Ed</span>}
                     </div>
                   </div>
@@ -538,7 +593,7 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
                 <div className="port-card-trend">
                   <Sparkline
                     history={priceData[card.id]?.history}
-                    gradeKey={CONDITION_TO_GRADE[card.condition] || 'nm'}
+                    gradeKey={historyGradeKey(card)}
                   />
                 </div>
 
@@ -592,17 +647,60 @@ export default function Portfolio({ portfolio, addItem, removeItem, priceData, p
                 placeholder="e.g. Evolving Skies"
               />
             </div>
-            <div className="form-group">
-              <label>Condition</label>
-              <select
-                value={form.condition}
-                onChange={(e) => setForm({ ...form, condition: e.target.value })}
-              >
-                {CONDITIONS.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </select>
-            </div>
+            {editItem?.cardId && (
+              <div className="add-mode-tabs">
+                <button
+                  type="button"
+                  className={`add-mode-btn${!form.isGraded ? ' active' : ''}`}
+                  onClick={() => setForm({ ...form, isGraded: false, gradeTier: '', gradeLabel: '' })}
+                >
+                  Raw
+                </button>
+                <button
+                  type="button"
+                  className={`add-mode-btn${form.isGraded ? ' active' : ''}`}
+                  onClick={() => setForm({ ...form, isGraded: true })}
+                >
+                  Graded
+                </button>
+              </div>
+            )}
+
+            {form.isGraded ? (
+              <div className="form-group">
+                <label>Grade</label>
+                {gradeOptionsLoading ? (
+                  <div className="form-hint">Loading available grades…</div>
+                ) : gradeOptions.length ? (
+                  <select
+                    value={form.gradeTier}
+                    onChange={(e) => {
+                      const tier = e.target.value;
+                      setForm({ ...form, gradeTier: tier, gradeLabel: formatGradeTier(tier) });
+                    }}
+                  >
+                    <option value="">Select a grade…</option>
+                    {gradeOptions.map((tier) => (
+                      <option key={tier} value={tier}>{formatGradeTier(tier)}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="form-hint">No graded price data available for this card yet.</div>
+                )}
+              </div>
+            ) : (
+              <div className="form-group">
+                <label>Condition</label>
+                <select
+                  value={form.condition}
+                  onChange={(e) => setForm({ ...form, condition: e.target.value })}
+                >
+                  {CONDITIONS.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="form-group">
               <label>Purchase Price ($)</label>
               <input

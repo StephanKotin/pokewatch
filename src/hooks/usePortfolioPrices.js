@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { apiGet } from '../api/poketrace';
-import { CONDITION_TO_GRADE } from '../data/grades';
 
 // Fetches live quotes + PokeTrace's real price history for each portfolio
-// holding, keyed by the item's own grading tier (raw condition -> short key).
+// holding. Graded cards are keyed by their specific graded tier (e.g.
+// "PSA_10"). Raw cards always price off the base ungraded ("nm"/NEAR_MINT)
+// quote regardless of the recorded physical condition — PokeTrace's
+// per-condition comps (LP/MP/HP/DMG) are too thin to trust as a distinct
+// price point, so condition stays informational-only for raw cards.
 export function usePortfolioPrices(portfolio) {
   const [priceData, setPriceData] = useState({});
   const [loading, setLoading] = useState(false);
@@ -31,11 +34,17 @@ export function usePortfolioPrices(portfolio) {
       if (item.edition) params.set('edition', item.edition);
       if (item.number) params.set('number', item.number);
 
-      const gradeKey = CONDITION_TO_GRADE[item.condition] || 'nm';
-      const historyParams = new URLSearchParams({ name: item.name, grade: gradeKey });
+      const historyParams = new URLSearchParams({ name: item.name });
       if (item.set) historyParams.set('set', item.set);
       if (item.edition) historyParams.set('edition', item.edition);
       if (item.number) historyParams.set('number', item.number);
+
+      if (item.isGraded && item.gradeTier) {
+        params.set('gradeTier', item.gradeTier);
+        historyParams.set('gradeTier', item.gradeTier);
+      } else {
+        historyParams.set('grade', 'nm');
+      }
 
       const [history, live] = await Promise.all([
         apiGet(`/api/price-history?${historyParams}`).catch(() => []),

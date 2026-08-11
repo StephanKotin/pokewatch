@@ -71,15 +71,31 @@ export async function fetchPokeTracePrices(cardName, setName) {
   }
 }
 
-export function extractGradePrice(pokeTraceCard, gradeKey, grades) {
-  const grade = grades.find((g) => g.key === gradeKey);
-  if (!grade) return null;
+// Looks up a price for any PokeTrace tier field directly — works for raw
+// tiers (NEAR_MINT, ...) and graded tiers (PSA_10, ...) alike, since both
+// live in the same `prices[source][tier]` shape.
+export function extractTierPrice(pokeTraceCard, tierField) {
+  if (!tierField) return null;
   const sources = ['ebay', 'tcgplayer'];
   for (const src of sources) {
-    const p = pokeTraceCard.prices?.[src]?.[grade.ptField];
+    const p = pokeTraceCard.prices?.[src]?.[tierField];
     if (p && p.avg) return { avg: p.avg, low: p.low || p.avg, high: p.high || p.avg, source: src };
   }
   return null;
+}
+
+export function extractGradePrice(pokeTraceCard, gradeKey, grades) {
+  const grade = grades.find((g) => g.key === gradeKey);
+  if (!grade) return null;
+  return extractTierPrice(pokeTraceCard, grade.ptField);
+}
+
+// PokeTrace doesn't publish a fixed list of graded tier strings — they're
+// only discoverable per card via /cards/{id}'s gradedOptions field, so this
+// always reflects real, currently-priced tiers for this exact card rather
+// than a guessed PSA/BGS/CGC list.
+export async function fetchCardGrades(cardId) {
+  return apiGet(`/api/cards/${encodeURIComponent(cardId)}/grades`);
 }
 
 // Catalogue: sets and cards come straight from PokeTrace via the server's
