@@ -180,6 +180,11 @@ async function fetchPokemonTcgIoSets(attempt = 1) {
         await sleep(400 * attempt);
         return fetchPokemonTcgIoSets(attempt + 1);
       }
+      // 429s (the common case on the unauthenticated tier) won't clear
+      // within a few hundred ms of backoff — retrying here would just burn
+      // more of the same rate-limit budget for no benefit. The 5-minute gap
+      // between calls in getPokemonTcgIoSetsByName is the real backoff.
+      console.warn(`[pokemontcgio] set list fetch failed: HTTP ${response.status}`);
       return null;
     }
     const { data } = await response.json();
@@ -194,7 +199,39 @@ async function fetchPokemonTcgIoSets(attempt = 1) {
   }
 }
 
+// Survives process restarts (every deploy) so a redeploy doesn't force an
+// immediate re-fetch against pokemontcg.io's unauthenticated rate limit —
+// era/date/logo enrichment has no other data source (PokeTrace's own Set
+// object has none of these fields, confirmed live), so losing this on every
+// restart is what actually starved the catalogue, not the rate limit alone.
+const POKEMONTCGIO_SETS_CACHE_KEY = 'pokemontcgio_sets_v1';
+
+function loadPersistedPokemonTcgIoSetsCache() {
+  try {
+    const row = db.prepare('SELECT value, cached_at FROM app_cache WHERE key = ?').get(POKEMONTCGIO_SETS_CACHE_KEY);
+    if (!row) return null;
+    return { byName: new Map(JSON.parse(row.value)), cachedAt: row.cached_at, ok: true };
+  } catch (e) {
+    console.warn('[pokemontcgio] failed to load persisted sets cache:', e.message);
+    return null;
+  }
+}
+
+function persistPokemonTcgIoSetsCache(cache) {
+  try {
+    db.prepare(
+      'INSERT INTO app_cache (key, value, cached_at) VALUES (?, ?, ?) ' +
+      'ON CONFLICT(key) DO UPDATE SET value = excluded.value, cached_at = excluded.cached_at'
+    ).run(POKEMONTCGIO_SETS_CACHE_KEY, JSON.stringify([...cache.byName.entries()]), cache.cachedAt);
+  } catch (e) {
+    console.warn('[pokemontcgio] failed to persist sets cache:', e.message);
+  }
+}
+
 async function getPokemonTcgIoSetsByName() {
+  if (!pokemonTcgIoSetsCache) {
+    pokemonTcgIoSetsCache = loadPersistedPokemonTcgIoSetsCache();
+  }
   const maxAge = pokemonTcgIoSetsCache?.ok
     ? POKEMONTCGIO_SETS_CACHE_MAX_AGE_SECONDS
     : POKEMONTCGIO_SETS_RETRY_CACHE_MAX_AGE_SECONDS;
@@ -202,16 +239,26 @@ async function getPokemonTcgIoSetsByName() {
     return pokemonTcgIoSetsCache.byName;
   }
   const sets = await fetchPokemonTcgIoSets();
-  const byName = new Map();
-  for (const s of sets || []) {
-    byName.set(normalizeSetName(s.name), {
-      releaseDate: s.releaseDate ? s.releaseDate.replace(/\//g, '-') : null,
-      series: s.series || null,
-      logo: s.images?.logo || null,
-    });
+  if (sets) {
+    const byName = new Map();
+    for (const s of sets) {
+      byName.set(normalizeSetName(s.name), {
+        releaseDate: s.releaseDate ? s.releaseDate.replace(/\//g, '-') : null,
+        series: s.series || null,
+        logo: s.images?.logo || null,
+      });
+    }
+    pokemonTcgIoSetsCache = { byName, cachedAt: Date.now(), ok: true };
+    persistPokemonTcgIoSetsCache(pokemonTcgIoSetsCache);
+    return byName;
   }
-  pokemonTcgIoSetsCache = { byName, cachedAt: Date.now(), ok: !!sets };
-  return byName;
+  // Fetch failed (commonly a 429 on the unauthenticated tier) — keep serving
+  // whatever we last had, even if stale, instead of discarding it. Set
+  // metadata (series/date/logo) essentially never changes, so last-known-good
+  // stays accurate; only cachedAt advances, so the next call retries after
+  // the short backoff instead of waiting the full 24h.
+  pokemonTcgIoSetsCache = { byName: pokemonTcgIoSetsCache?.byName || new Map(), cachedAt: Date.now(), ok: false };
+  return pokemonTcgIoSetsCache.byName;
 }
 
 // Looks up a card's price via PokeTrace (real per-condition eBay/TCGPlayer
@@ -417,6 +464,11 @@ db.exec(`
     include_auctions INTEGER DEFAULT 1,
     us_only INTEGER DEFAULT 0,
     free_shipping INTEGER DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS app_cache (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    cached_at INTEGER NOT NULL
   );
 `);
 
