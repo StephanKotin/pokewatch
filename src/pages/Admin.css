@@ -1,0 +1,57 @@
+.admin-page {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.admin-title {
+  font-family: 'Bangers', cursive;
+  font-size: 28px;
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+}
+
+.admin-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-form-row {
+  grid-template-columns: 100px 1fr 110px 90px 120px;
+}
+
+.admin-form-wide {
+  flex: 1;
+}
+
+.admin-form-row:last-child {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+}
+
+.admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-row {
+  padding: 14px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.admin-order-items {
+  margin-top: 8px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}

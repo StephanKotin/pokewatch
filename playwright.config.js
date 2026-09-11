@@ -31,6 +31,13 @@ module.exports = defineConfig({
       // approves the account itself via the admin route, not via inbox.
       RESEND_API_KEY: '',
       ADMIN_EMAIL: '',
+      // Blanked for the same reason as the email vars above: without this,
+      // dotenv backfills the developer's real key and the boot-time Stripe
+      // Tax readiness check fires a live API call on every test run. Unset
+      // means the store's routes return 503, which is what the tests expect
+      // of an unconfigured store.
+      STRIPE_SECRET_KEY: '',
+      STRIPE_WEBHOOK_SECRET: '',
     },
   },
 });

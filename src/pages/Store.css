@@ -1,0 +1,61 @@
+.store-page {
+  padding: 0;
+}
+
+.store-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.store-title {
+  font-family: 'Bangers', cursive;
+  font-size: 28px;
+  letter-spacing: 1px;
+}
+
+.store-filter-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.store-filter-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  padding: 7px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.store-filter-btn:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+.store-filter-btn.active {
+  color: #0d0d0f;
+  background: var(--yellow);
+  border-color: var(--yellow);
+  font-weight: 600;
+}
+
+.store-card {
+  cursor: pointer;
+}
+
+.store-img-wrap {
+  aspect-ratio: 1/1;
+}
+
+.store-price {
+  font-family: 'DM Mono', monospace;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--yellow);
+  margin-bottom: 8px;
+}

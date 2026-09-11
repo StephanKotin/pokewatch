@@ -1,0 +1,23 @@
+.checkout-result-page {
+  max-width: 480px;
+  margin: 80px auto;
+  text-align: center;
+}
+
+.checkout-result-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.checkout-result-page h2 {
+  font-family: 'Bangers', cursive;
+  font-size: 28px;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.checkout-result-page p {
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}

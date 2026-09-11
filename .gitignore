@@ -4,6 +4,10 @@ node_modules/
 .DS_Store
 Thumbs.db
 .claude/
+# Vendored agent skills, fetched via `npx skills add`. Regenerable from
+# skills-lock.json (which IS committed), and large enough to drown a diff —
+# same reasoning as .claude/ above.
+.agents/
 dist/
 playwright-report/
 test-results/

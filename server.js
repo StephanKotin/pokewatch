@@ -10,8 +10,20 @@ const cron = require('node-cron');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const Stripe = require('stripe');
 
 const app = express();
+
+// Confirmed on the droplet (2026-09-11): requests arrive through two
+// proxies, Cloudflare's edge then Caddy, before reaching this process on
+// localhost:3000. Both append to X-Forwarded-For, so the address chain
+// Express sees is [127.0.0.1 (Caddy), <cloudflare edge>, <real client>].
+// The count must match that depth exactly: 1 would resolve req.ip to a
+// Cloudflare edge IP — lumping every visitor behind one address, the very
+// thing this is meant to fix — while a too-large value would start trusting
+// client-supplied X-Forwarded-For entries and let anyone spoof their IP.
+app.set('trust proxy', 2);
+
 const PORT = process.env.PORT || 3000;
 const POKETRACE_API_KEY = process.env.POKETRACE_API_KEY;
 const POKETRACE_BASE = 'https://api.poketrace.com/v1';
@@ -82,6 +94,75 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const EMAIL_FROM = process.env.EMAIL_FROM || 'PokeWatch <onboarding@resend.dev>';
 const APP_BASE_URL = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+
+// No fallback here either, but unlike JWT_SECRET this doesn't fail boot —
+// the store is a distinct subsystem from the tracker, so a site with no
+// Stripe key configured yet should still serve the rest of the app. Routes
+// that need it check `stripe` and return 503 instead of crashing.
+//
+// Prefer a restricted key (rk_...) over a secret key (sk_...): this process
+// only creates Checkout Sessions, so a key scoped to just that can do far
+// less damage if it leaks than a full secret key. Either prefix works here.
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+// Pinned rather than floating: an unpinned client silently adopts whatever
+// version Stripe defaults the account to, so a server-side change could alter
+// response shapes without any deploy here.
+const STRIPE_API_VERSION = '2026-08-26.dahlia';
+const stripe = STRIPE_SECRET_KEY
+  ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: STRIPE_API_VERSION })
+  : null;
+if (!STRIPE_SECRET_KEY) {
+  console.warn('[store] STRIPE_SECRET_KEY not set — checkout is disabled until it is.');
+}
+
+// Tags Checkout Sessions so this flow can be isolated in the Stripe
+// Dashboard. Fixed, not per-request — it groups sessions, so it has to be
+// stable across them.
+const STRIPE_INTEGRATION_ID = 'tcgoftexas-store-qkzmrvhd';
+
+// Stripe's "General - Tangible Goods" code, taken from Stripe's canonical
+// list (https://docs.stripe.com/tax/tax-codes) rather than guessed — a
+// made-up or wrong code silently yields zero tax instead of erroring.
+// Overridable by env so a more specific collectibles code can be swapped in
+// without a code change once a tax advisor confirms the right one.
+const STRIPE_PRODUCT_TAX_CODE = process.env.STRIPE_PRODUCT_TAX_CODE || 'txcd_99999999';
+
+// Defaults to ON deliberately. Stripe rejects a session outright when Tax
+// isn't activated, so leaving this on means a misconfigured account fails
+// loudly at checkout instead of quietly selling without tax — the failure
+// mode that can't be corrected after the fact. Set to "off" only for local
+// development against an account with no Tax setup.
+const STRIPE_AUTOMATIC_TAX = (process.env.STRIPE_AUTOMATIC_TAX || 'on').toLowerCase() !== 'off';
+
+// Surfaces the silent-zero-tax trap at boot rather than at reconciliation
+// time. Stripe Tax collects nothing in jurisdictions with no active
+// registration and reports no error while doing so, so a store can look
+// perfectly healthy while accruing an uncollected tax liability.
+async function checkStripeTaxReadiness() {
+  if (!stripe || !STRIPE_AUTOMATIC_TAX) return;
+  try {
+    const settings = await stripe.tax.settings.retrieve();
+    if (settings.status !== 'active') {
+      console.error(
+        `[store] Stripe Tax is NOT active (status: ${settings.status}; missing: ` +
+        `${settings.status_details?.pending?.missing_fields?.join(', ') || 'unknown'}). ` +
+        'Checkout will fail with a 500 until this is fixed: https://dashboard.stripe.com/test/settings/tax'
+      );
+      return;
+    }
+    const regs = await stripe.tax.registrations.list({ status: 'active', limit: 1 });
+    if (!regs.data.length) {
+      console.error(
+        '[store] Stripe Tax is active but has NO active registrations — it will collect $0 ' +
+        'tax on every order, without raising an error, and that cannot be corrected ' +
+        'retroactively. Add one under Dashboard > Tax > Locations before taking real orders.'
+      );
+    }
+  } catch (e) {
+    console.warn('[store] could not verify Stripe Tax readiness:', e.message);
+  }
+}
 
 // Sends via Resend's REST API — no SDK needed, just a POST. Missing config
 // (no key set yet, or the request fails) logs a warning instead of throwing,
@@ -470,6 +551,42 @@ db.exec(`
     value TEXT NOT NULL,
     cached_at INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS products (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    image_url TEXT,
+    price_cents INTEGER NOT NULL,
+    stock INTEGER NOT NULL DEFAULT 0,
+    sku TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER DEFAULT (strftime('%s','now'))
+  );
+  CREATE TABLE IF NOT EXISTS orders (
+    id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'pending',
+    user_id TEXT,
+    email TEXT,
+    shipping_name TEXT,
+    shipping_address TEXT,
+    stripe_checkout_session_id TEXT,
+    stripe_payment_intent_id TEXT,
+    subtotal_cents INTEGER NOT NULL DEFAULT 0,
+    shipping_cents INTEGER NOT NULL DEFAULT 0,
+    tax_cents INTEGER NOT NULL DEFAULT 0,
+    total_cents INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER DEFAULT (strftime('%s','now')),
+    updated_at INTEGER DEFAULT (strftime('%s','now'))
+  );
+  CREATE TABLE IF NOT EXISTS order_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id TEXT NOT NULL,
+    product_id TEXT,
+    name_snapshot TEXT NOT NULL,
+    price_cents_snapshot INTEGER NOT NULL,
+    quantity INTEGER NOT NULL
+  );
 `);
 
 // Add user_id columns to existing tables (idempotent)
@@ -492,6 +609,7 @@ try { db.exec("ALTER TABLE alerts ADD COLUMN user_id TEXT"); } catch(e) {}
 // 'approved' so nobody already using the app gets locked out retroactively.
 try { db.exec("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'"); } catch(e) {}
 try { db.exec("ALTER TABLE users ADD COLUMN approval_token TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'"); } catch(e) {}
 try {
   db.exec("ALTER TABLE users ADD COLUMN has_onboarded INTEGER DEFAULT 0");
   // This ALTER only succeeds the one time it actually adds the column (a
@@ -517,6 +635,13 @@ function authenticate(req, res, next) {
   }
 }
 
+// Must run after `authenticate` — relies on req.userId being set.
+function requireAdmin(req, res, next) {
+  const user = db.prepare('SELECT role FROM users WHERE id = ?').get(req.userId);
+  if (!user || user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  next();
+}
+
 // CSP is left off: the built page pulls Google Fonts' stylesheet and talks
 // to PostHog cross-origin, both of which a default CSP would block, and
 // there's no staging environment to catch that kind of breakage before it
@@ -528,25 +653,133 @@ app.use(helmet({ contentSecurityPolicy: false }));
 // needs to allow a second origin — it only closes off third-party pages
 // making cross-origin requests against this API.
 app.use(cors({ origin: APP_BASE_URL }));
+
+// Applies stripe.checkout.sessions.create's result to our own order record:
+// marks it paid, decrements stock, emails buyer + admin. Split out from the
+// webhook route below so it's easy to reason about independent of Stripe's
+// event envelope. Idempotent (checked via order.status) since Stripe retries
+// webhook deliveries that don't 2xx in time.
+function fulfillOrder(session) {
+  const order = db.prepare('SELECT * FROM orders WHERE stripe_checkout_session_id = ?').get(session.id);
+  if (!order) {
+    console.error('[stripe webhook] no matching order for session', session.id);
+    return;
+  }
+  if (order.status === 'paid') return;
+
+  const details = session.customer_details || {};
+  const address = session.shipping_details?.address || details.address || null;
+
+  db.prepare(
+    `UPDATE orders SET status = 'paid', email = ?, shipping_name = ?, shipping_address = ?,
+     stripe_payment_intent_id = ?, shipping_cents = ?, tax_cents = ?, total_cents = ?,
+     updated_at = strftime('%s','now') WHERE id = ?`
+  ).run(
+    details.email || null,
+    session.shipping_details?.name || details.name || null,
+    address ? JSON.stringify(address) : null,
+    session.payment_intent || null,
+    session.shipping_cost?.amount_total ?? 0,
+    session.total_details?.amount_tax ?? 0,
+    session.amount_total ?? order.subtotal_cents,
+    order.id
+  );
+
+  const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(order.id);
+  const decrementStock = db.prepare('UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?');
+  for (const item of items) {
+    if (item.product_id) decrementStock.run(item.quantity, item.product_id);
+  }
+
+  const itemsHtml = items
+    .map((i) => `<li>${i.quantity} &times; ${i.name_snapshot} &mdash; $${((i.price_cents_snapshot * i.quantity) / 100).toFixed(2)}</li>`)
+    .join('');
+  if (details.email) {
+    sendEmail({
+      to: details.email,
+      subject: 'Your TCG of Texas order is confirmed',
+      html: `<p>Thanks for your order!</p><ul>${itemsHtml}</ul>`,
+    }).catch(() => {});
+  }
+  if (ADMIN_EMAIL) {
+    sendEmail({
+      to: ADMIN_EMAIL,
+      subject: `New order: ${details.email || 'guest'}`,
+      html: `<p>New paid order ${order.id}</p><ul>${itemsHtml}</ul>`,
+    }).catch(() => {});
+  }
+}
+
+// Counterpart to fulfillOrder for delayed-notification payments that fail
+// after checkout completed. Stock was never decremented for these (that only
+// happens in fulfillOrder), so this just closes the order out.
+function cancelOrder(session) {
+  const order = db.prepare('SELECT * FROM orders WHERE stripe_checkout_session_id = ?').get(session.id);
+  if (!order || order.status === 'paid') return;
+  db.prepare("UPDATE orders SET status = 'cancelled', updated_at = strftime('%s','now') WHERE id = ?").run(order.id);
+  console.log('[stripe webhook] async payment failed, order cancelled:', order.id);
+}
+
+// Registered before express.json() below — Stripe's signature verification
+// needs the raw request body, not JSON already parsed into an object.
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), (req, res) => {
+  if (!stripe || !STRIPE_WEBHOOK_SECRET) return res.status(503).send('Webhook not configured');
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], STRIPE_WEBHOOK_SECRET);
+  } catch (e) {
+    console.error('[stripe webhook] signature verification failed:', e.message);
+    return res.status(400).send(`Webhook Error: ${e.message}`);
+  }
+
+  try {
+    switch (event.type) {
+      // Both events must fulfill, and both must be gated on payment_status.
+      // With delayed-notification payment methods (bank debits and similar),
+      // checkout.session.completed arrives while the session is still
+      // `unpaid` and the money may never actually land. Fulfilling on that
+      // event alone would mark such orders paid and decrement stock for
+      // payments that later fail, while genuinely successful ones — which
+      // arrive later as async_payment_succeeded — would never fulfill at all.
+      case 'checkout.session.completed':
+      case 'checkout.session.async_payment_succeeded': {
+        const session = event.data.object;
+        if (session.payment_status === 'unpaid') {
+          // Not an error: the payment simply hasn't settled. Leave the order
+          // pending and let async_payment_succeeded fulfill it when it does.
+          console.log('[stripe webhook] session unpaid, deferring fulfillment:', session.id);
+        } else {
+          fulfillOrder(session);
+        }
+        break;
+      }
+      case 'checkout.session.async_payment_failed':
+        cancelOrder(event.data.object);
+        break;
+    }
+  } catch (e) {
+    console.error('[stripe webhook] handler failed:', event.type, e.message);
+  }
+
+  res.json({ received: true });
+});
+
 app.use(express.json({ limit: '100kb' }));
 
-// Whether the droplet puts a reverse proxy (nginx/Caddy/etc.) in front of
-// this process isn't known — trust proxy is left at Express's default
-// (false), so this always keys off the raw socket address. If there is a
-// proxy, every request looks like it comes from the same IP and the limit
-// becomes one shared bucket for all users instead of per-visitor; if there
-// isn't, this is correct per-IP limiting either way. That degraded-but-safe
-// behavior beats the alternative of guessing trust proxy wrong, which would
-// either crash every auth request (unexpected X-Forwarded-For) or let a
-// spoofed header bypass the limit entirely. xForwardedForHeader validation
-// is turned off since we deliberately aren't reading that header at all.
-// Revisit once it's confirmed whether a proxy sits in front.
+// The open question this used to carry — whether a reverse proxy sits in
+// front — is now answered: Caddy does, behind Cloudflare, which is why
+// `trust proxy` is set above. Until then this keyed off the raw socket
+// address, which under a proxy is always Caddy's, so every visitor shared
+// one rate-limit bucket instead of getting their own. The xForwardedForHeader
+// validation that was disabled alongside it is deliberately left on now:
+// with trust proxy configured it no longer false-positives, and it's the
+// check that would flag the hop count drifting out of sync with the real
+// proxy chain (e.g. if Cloudflare were ever bypassed or another hop added).
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  validate: { xForwardedForHeader: false },
   message: { error: 'Too many attempts. Try again later.' },
 });
 
@@ -613,14 +846,14 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   if (user.status === 'rejected') return res.status(403).json({ error: 'This account request was declined' });
 
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ token, user: { id: user.id, email: user.email, hasOnboarded: !!user.has_onboarded } });
+  res.json({ token, user: { id: user.id, email: user.email, hasOnboarded: !!user.has_onboarded, role: user.role } });
 });
 
 app.get('/api/auth/me', authenticate, (req, res) => {
-  const user = db.prepare('SELECT id, email, status, has_onboarded FROM users WHERE id = ?').get(req.userId);
+  const user = db.prepare('SELECT id, email, status, has_onboarded, role FROM users WHERE id = ?').get(req.userId);
   if (!user) return res.status(401).json({ error: 'User not found' });
   if (user.status !== 'approved') return res.status(403).json({ error: 'Account not approved' });
-  res.json({ user: { id: user.id, email: user.email, status: user.status, hasOnboarded: !!user.has_onboarded } });
+  res.json({ user: { id: user.id, email: user.email, status: user.status, hasOnboarded: !!user.has_onboarded, role: user.role } });
 });
 
 // Marks the one-time welcome splash as seen so it doesn't show again on
@@ -1175,6 +1408,152 @@ app.get('/api/cards/:id/grades', async (req, res) => {
   }
 });
 
+// --- Store Routes (own inventory — singles + sealed product) ---
+
+app.get('/api/products', (req, res) => {
+  const { type } = req.query;
+  const rows = (type === 'single' || type === 'sealed')
+    ? db.prepare('SELECT * FROM products WHERE active = 1 AND type = ? ORDER BY created_at DESC').all(type)
+    : db.prepare('SELECT * FROM products WHERE active = 1 ORDER BY created_at DESC').all();
+  res.json(rows);
+});
+
+app.get('/api/products/:id', (req, res) => {
+  const product = db.prepare('SELECT * FROM products WHERE id = ? AND active = 1').get(req.params.id);
+  if (!product) return res.status(404).json({ error: 'Not found' });
+  res.json(product);
+});
+
+// Public — guest checkout by design, no account required to buy. Re-prices
+// and re-checks stock from the DB (never trusts client-submitted prices) and
+// creates the order row up front as 'pending' so the webhook above only has
+// to flip its status by stripe_checkout_session_id, not reconstruct the cart
+// from Stripe's session payload.
+app.post('/api/checkout', async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Store checkout is not configured yet.' });
+  const { items } = req.body;
+  if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'Cart is empty' });
+
+  try {
+    const lineItems = [];
+    const toInsert = [];
+    let subtotalCents = 0;
+
+    for (const { productId, quantity } of items) {
+      const qty = Math.max(1, Math.min(99, parseInt(quantity, 10) || 1));
+      const product = db.prepare('SELECT * FROM products WHERE id = ? AND active = 1').get(productId);
+      if (!product) return res.status(400).json({ error: `Product not found: ${productId}` });
+      if (product.stock < qty) return res.status(400).json({ error: `Not enough stock for ${product.name}` });
+
+      subtotalCents += product.price_cents * qty;
+      toInsert.push({ productId: product.id, name: product.name, priceCents: product.price_cents, qty });
+      lineItems.push({
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: product.name,
+            images: product.image_url ? [product.image_url] : [],
+            // Without a tax code, Stripe Tax falls back to the account's
+            // preset code — and if that's unset or Nontaxable, it quietly
+            // calculates zero tax rather than failing.
+            tax_code: STRIPE_PRODUCT_TAX_CODE,
+          },
+          // US sales tax is added on top of the listed price rather than
+          // baked into it.
+          tax_behavior: 'exclusive',
+          unit_amount: product.price_cents,
+        },
+        quantity: qty,
+      });
+    }
+
+    const orderId = crypto.randomUUID();
+    db.prepare('INSERT INTO orders (id, status, subtotal_cents, total_cents) VALUES (?, ?, ?, ?)')
+      .run(orderId, 'pending', subtotalCents, subtotalCents);
+    const insertItem = db.prepare(
+      'INSERT INTO order_items (order_id, product_id, name_snapshot, price_cents_snapshot, quantity) VALUES (?, ?, ?, ?, ?)'
+    );
+    for (const item of toInsert) {
+      insertItem.run(orderId, item.productId, item.name, item.priceCents, item.qty);
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: lineItems,
+      integration_identifier: STRIPE_INTEGRATION_ID,
+      // Only collects tax where there's an active Stripe Tax registration.
+      // With none, this silently collects nothing rather than erroring — see
+      // the Stripe Tax note in .env.example.
+      automatic_tax: { enabled: STRIPE_AUTOMATIC_TAX },
+      // Doubles as the address Stripe Tax uses to determine jurisdiction,
+      // which is why billing_address_collection isn't forced on as well —
+      // that would add checkout friction without adding any tax signal.
+      shipping_address_collection: { allowed_countries: ['US'] },
+      shipping_options: [{
+        shipping_rate_data: {
+          type: 'fixed_amount',
+          fixed_amount: { amount: 599, currency: 'usd' },
+          display_name: 'Standard Shipping',
+          delivery_estimate: { minimum: { unit: 'business_day', value: 3 }, maximum: { unit: 'business_day', value: 7 } },
+        },
+      }],
+      metadata: { orderId },
+      success_url: `${APP_BASE_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${APP_BASE_URL}/checkout/cancel`,
+    });
+
+    db.prepare('UPDATE orders SET stripe_checkout_session_id = ? WHERE id = ?').run(session.id, orderId);
+    res.json({ url: session.url });
+  } catch (e) {
+    console.error('[checkout] failed:', e.message);
+    res.status(500).json({ error: 'Checkout failed. Please try again.' });
+  }
+});
+
+// --- Store admin routes (product/order management) ---
+
+app.get('/api/admin/products', authenticate, requireAdmin, (req, res) => {
+  res.json(db.prepare('SELECT * FROM products ORDER BY created_at DESC').all());
+});
+
+app.post('/api/admin/products', authenticate, requireAdmin, (req, res) => {
+  const { type, name, description, image_url, price_cents, stock, sku } = req.body;
+  if (!type || !name || !price_cents) return res.status(400).json({ error: 'type, name, price_cents required' });
+  const id = crypto.randomUUID();
+  db.prepare(
+    'INSERT INTO products (id, type, name, description, image_url, price_cents, stock, sku) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, type, name, description || null, image_url || null, price_cents, stock || 0, sku || null);
+  res.json({ ok: true, id });
+});
+
+app.put('/api/admin/products/:id', authenticate, requireAdmin, (req, res) => {
+  const { type, name, description, image_url, price_cents, stock, sku, active } = req.body;
+  db.prepare(
+    'UPDATE products SET type = ?, name = ?, description = ?, image_url = ?, price_cents = ?, stock = ?, sku = ?, active = ? WHERE id = ?'
+  ).run(type, name, description || null, image_url || null, price_cents, stock || 0, sku || null, active ? 1 : 0, req.params.id);
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/products/:id', authenticate, requireAdmin, (req, res) => {
+  // Soft delete — order_items reference product_id, so hard-deleting would
+  // orphan past orders' line items instead of just hiding the product.
+  db.prepare('UPDATE products SET active = 0 WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/orders', authenticate, requireAdmin, (req, res) => {
+  const orders = db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
+  const itemsStmt = db.prepare('SELECT * FROM order_items WHERE order_id = ?');
+  res.json(orders.map((o) => ({ ...o, items: itemsStmt.all(o.id) })));
+});
+
+app.put('/api/admin/orders/:id', authenticate, requireAdmin, (req, res) => {
+  const { status } = req.body;
+  if (!['pending', 'paid', 'fulfilled', 'cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  db.prepare("UPDATE orders SET status = ?, updated_at = strftime('%s','now') WHERE id = ?").run(status, req.params.id);
+  res.json({ ok: true });
+});
+
 // --- Protected Routes (user-scoped) ---
 
 app.get('/api/watchlist', authenticate, (req, res) => {
@@ -1281,4 +1660,5 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`PokéWatch server running on port ${PORT}`);
+  checkStripeTaxReadiness();
 });

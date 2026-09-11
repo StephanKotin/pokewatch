@@ -8,6 +8,7 @@ import { useWatchlist } from './hooks/useWatchlist';
 import { usePortfolio } from './hooks/usePortfolio';
 import { useAlerts } from './hooks/useAlerts';
 import { usePortfolioPrices } from './hooks/usePortfolioPrices';
+import { useCart } from './hooks/useCart';
 import { searchListingsAPI } from './api/poketrace';
 import { trackPageview } from './analytics';
 import Login from './pages/Login';
@@ -17,6 +18,11 @@ import Catalogue from './pages/Catalogue';
 import Portfolio from './pages/Portfolio';
 import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
+import Store from './pages/Store';
+import ProductDetail from './pages/ProductDetail';
+import Cart from './pages/Cart';
+import CheckoutResult from './pages/CheckoutResult';
+import Admin from './pages/Admin';
 
 const TAB_PATHS = {
   portfolio: '/',
@@ -25,9 +31,19 @@ const TAB_PATHS = {
   alerts: '/alerts',
   listings: '/listings',
   settings: '/settings',
+  store: '/store',
+  cart: '/cart',
+  checkoutSuccess: '/checkout/success',
+  checkoutCancel: '/checkout/cancel',
+  admin: '/admin',
 };
 
+// The store is public (guest checkout, no login/approval required) —
+// everything else stays behind the tracker's existing login gate.
+const PUBLIC_TABS = new Set(['store', 'storeItem', 'cart', 'checkoutSuccess', 'checkoutCancel']);
+
 function tabFromPath(pathname) {
+  if (pathname.startsWith('/store/')) return 'storeItem';
   const entry = Object.entries(TAB_PATHS).find(([, path]) => path === pathname);
   return entry ? entry[0] : 'portfolio';
 }
@@ -44,6 +60,7 @@ export default function App() {
   // every single visit instead of reusing what's already been fetched.
   const { priceData: portfolioPriceData, loading: portfolioPricesLoading } = usePortfolioPrices(portfolio);
   const { firedAlerts, fireAlert, clearAlert } = useAlerts();
+  const cart = useCart();
 
   const [activeTab, setActiveTabState] = useState(() => tabFromPath(window.location.pathname));
   const [listings, setListings] = useState([]);
@@ -56,6 +73,16 @@ export default function App() {
       window.history.pushState({ tab }, '', path);
     }
   }, []);
+
+  const openProduct = useCallback((id) => {
+    setActiveTabState('storeItem');
+    const path = `/store/${id}`;
+    if (window.location.pathname !== path) {
+      window.history.pushState({ tab: 'storeItem', id }, '', path);
+    }
+  }, []);
+
+  const storeItemId = activeTab === 'storeItem' ? window.location.pathname.slice('/store/'.length) : null;
 
   useEffect(() => {
     function onPopState() {
@@ -190,21 +217,50 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  const isPublicRoute = PUBLIC_TABS.has(activeTab);
+  if (!user && !isPublicRoute) {
     return <Login />;
   }
 
   return (
     <>
-      {!user.hasOnboarded && <WelcomeSplash onDismiss={markOnboarded} />}
+      {user && !user.hasOnboarded && <WelcomeSplash onDismiss={markOnboarded} />}
       <Header
         activeTab={activeTab}
         onTabChange={setActiveTab}
         user={user}
         onLogout={logout}
-        onLogoClick={() => setActiveTab('portfolio')}
+        onLogoClick={() => setActiveTab(user ? 'portfolio' : 'store')}
+        cartCount={cart.count}
       />
       <main>
+        {activeTab === 'store' && (
+          <Store onAddToCart={cart.addItem} onOpenProduct={openProduct} toast={toast} />
+        )}
+        {activeTab === 'storeItem' && (
+          <ProductDetail
+            productId={storeItemId}
+            onAddToCart={cart.addItem}
+            onBack={() => setActiveTab('store')}
+            toast={toast}
+          />
+        )}
+        {activeTab === 'cart' && (
+          <Cart cart={cart} onGoToShop={() => setActiveTab('store')} toast={toast} />
+        )}
+        {activeTab === 'checkoutSuccess' && (
+          <CheckoutResult
+            status="success"
+            onGoToShop={() => {
+              cart.clear();
+              setActiveTab('store');
+            }}
+          />
+        )}
+        {activeTab === 'checkoutCancel' && (
+          <CheckoutResult status="cancel" onGoToShop={() => setActiveTab('store')} />
+        )}
+        {activeTab === 'admin' && user?.role === 'admin' && <Admin toast={toast} />}
         {activeTab === 'watchlist' && (
           <Watchlist
             watchlist={watchlist}

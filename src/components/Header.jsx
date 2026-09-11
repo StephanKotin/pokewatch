@@ -2,7 +2,7 @@ import React from 'react';
 import TabNav from './TabNav';
 import './Header.css';
 
-export default function Header({ activeTab, onTabChange, user, onLogout, onLogoClick }) {
+export default function Header({ activeTab, onTabChange, user, onLogout, onLogoClick, cartCount }) {
   return (
     <header className="app-header">
       <a
@@ -16,24 +16,47 @@ export default function Header({ activeTab, onTabChange, user, onLogout, onLogoC
         Poke<span>Watch</span> &#128064;
       </a>
 
-      <TabNav activeTab={activeTab} onTabChange={onTabChange} />
+      <TabNav activeTab={activeTab} onTabChange={onTabChange} user={user} />
 
-      {user && (
-        <div className="header-account">
+      {/* Cart works for guests too — the store supports checkout without an
+          account — so it lives outside the logged-in-only block below. */}
+      <div className="header-account">
+        <button
+          className={`settings-icon-btn${activeTab === 'cart' ? ' active' : ''}`}
+          onClick={() => onTabChange('cart')}
+          title="Cart"
+          aria-label="Cart"
+        >
+          &#128722;
+          {cartCount > 0 && <span className="cart-count-badge">{cartCount}</span>}
+        </button>
+        {user?.role === 'admin' && (
           <button
-            className={`settings-icon-btn${activeTab === 'settings' ? ' active' : ''}`}
-            onClick={() => onTabChange('settings')}
-            title="Settings"
-            aria-label="Settings"
+            className={`settings-icon-btn${activeTab === 'admin' ? ' active' : ''}`}
+            onClick={() => onTabChange('admin')}
+            title="Store Admin"
+            aria-label="Store Admin"
           >
-            &#9881;
+            &#128737;
           </button>
-          <span className="header-email">{user.email}</span>
-          <button className="header-signout-btn" onClick={onLogout}>
-            Sign Out
-          </button>
-        </div>
-      )}
+        )}
+        {user && (
+          <>
+            <button
+              className={`settings-icon-btn${activeTab === 'settings' ? ' active' : ''}`}
+              onClick={() => onTabChange('settings')}
+              title="Settings"
+              aria-label="Settings"
+            >
+              &#9881;
+            </button>
+            <span className="header-email">{user.email}</span>
+            <button className="header-signout-btn" onClick={onLogout}>
+              Sign Out
+            </button>
+          </>
+        )}
+      </div>
     </header>
   );
 }

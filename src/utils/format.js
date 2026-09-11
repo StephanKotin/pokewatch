@@ -8,6 +8,13 @@ export function fmt(cents) {
   return d.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
+// fmtPrice: input cents -> exact "12.34" dollars-and-cents string. Unlike
+// fmt(), never rounds off — a storefront price has to show what it charges.
+export function fmtPrice(cents) {
+  if (cents == null) return '—';
+  return (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 // fmtD: input dollars
 export function fmtD(dollars) {
   if (dollars == null) return '—';
