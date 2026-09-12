@@ -10,6 +10,7 @@ const cron = require('node-cron');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 const Stripe = require('stripe');
 
 const app = express();
@@ -1797,6 +1798,124 @@ async function scanPrices() {
 }
 
 cron.schedule('0 */6 * * *', scanPrices);
+
+// --- Daily Company Report Email ---
+
+// A Claude Code cloud routine commits business/daily/<YYYY-MM-DD>.md to the
+// `reports` branch every weekday at 12:00 UTC. That branch is deliberately
+// NOT master: every push to master runs CI and redeploys this droplet, and
+// shipping a markdown file is not a reason to restart production. So the
+// report never arrives in the working tree — this job reads it straight out
+// of the fetched ref instead.
+const REPORT_EMAIL_TO = process.env.REPORT_EMAIL_TO;
+const REPORT_BRANCH = 'reports';
+// This runs inside the always-on web process, so every git call is bounded.
+// A hung fetch (dead network, credential prompt) would otherwise sit there
+// holding a child process open until the next restart.
+const REPORT_GIT_TIMEOUT_MS = 20000;
+
+// Read-only git. The droplet's checkout is a deploy target that
+// `git reset --hard origin/master` runs against, so nothing here may touch
+// the working tree, the index, or HEAD: `fetch` only moves a remote-tracking
+// ref, and `git show` reads a blob out of the object database. execFile with
+// an argv array (not exec with a shell string) keeps the interpolated date
+// out of any shell parsing. cwd is __dirname, the same way DB_PATH is
+// derived above, so the job works regardless of the service's working dir.
+function gitRead(args) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'git',
+      args,
+      { cwd: __dirname, timeout: REPORT_GIT_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, windowsHide: true },
+      (err, stdout, stderr) => {
+        if (err) return reject(new Error(((stderr || '').trim() || err.message || 'git failed').split('\n')[0]));
+        resolve(stdout);
+      }
+    );
+  });
+}
+
+const escapeHtml = (str) =>
+  String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// The markdown is emailed inside a <pre> rather than converted to HTML. A
+// hand-rolled markdown parser is a pile of regexes that silently mangles
+// tables and code fences, and a real one is a dependency this process does
+// not otherwise need — for a report read by one person, monospaced source is
+// both honest and complete. pre-wrap so long lines still wrap in a mail client.
+function renderReportHtml(date, markdown) {
+  return [
+    '<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif">',
+    `<p style="color:#555;font-size:13px">Daily company report for <strong>${escapeHtml(date)}</strong>, from the <code>${escapeHtml(REPORT_BRANCH)}</code> branch.</p>`,
+    '<pre style="white-space:pre-wrap;word-wrap:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.5;background:#f6f8fa;border:1px solid #e1e4e8;border-radius:6px;padding:16px">',
+    escapeHtml(markdown),
+    '</pre>',
+    '</div>',
+  ].join('');
+}
+
+// Every failure below is expected on an unattended box, not exceptional: the
+// branch may not exist yet, today's file may be missing (failed run, or a
+// holiday), the network may be down, Resend may be having a day. All of them
+// log and return. The outer try/catch is the backstop so nothing escapes as
+// an unhandled rejection and takes the process with it.
+async function emailDailyReport() {
+  try {
+    if (!REPORT_EMAIL_TO) {
+      console.warn('[report] REPORT_EMAIL_TO not set — skipping daily report email.');
+      return;
+    }
+
+    // UTC, matching the routine that names the file at 12:00 UTC. A local
+    // date would name yesterday's file for half the world.
+    const date = new Date().toISOString().slice(0, 10);
+    const reportPath = `business/daily/${date}.md`;
+
+    try {
+      await gitRead(['fetch', '--no-tags', 'origin', `+${REPORT_BRANCH}:refs/remotes/origin/${REPORT_BRANCH}`]);
+    } catch (e) {
+      // Covers both "branch doesn't exist yet" (fatal: couldn't find remote
+      // ref reports) and any network/credential/timeout failure.
+      console.error('[report] git fetch failed — no report emailed:', e.message);
+      return;
+    }
+
+    let markdown;
+    try {
+      markdown = await gitRead(['show', `refs/remotes/origin/${REPORT_BRANCH}:${reportPath}`]);
+    } catch (e) {
+      console.warn(`[report] ${reportPath} not on origin/${REPORT_BRANCH} — nothing to send:`, e.message);
+      return;
+    }
+
+    if (!markdown.trim()) {
+      console.warn(`[report] ${reportPath} is empty — nothing to send.`);
+      return;
+    }
+
+    // sendEmail already swallows and logs its own failures (missing key,
+    // non-2xx from Resend, network error) and returns false.
+    const sent = await sendEmail({
+      to: REPORT_EMAIL_TO,
+      subject: `PokéWatch daily report — ${date}`,
+      html: renderReportHtml(date, markdown),
+    });
+    console.log(sent ? `[report] Daily report for ${date} emailed to ${REPORT_EMAIL_TO}.` : `[report] Daily report for ${date} was not sent.`);
+  } catch (e) {
+    console.error('[report] daily report job failed:', (e && e.message) || e);
+  }
+}
+
+// 13:00 UTC, weekdays (08:00 America/Chicago) — a full hour after the cloud
+// routine's 12:00 slot. The scheduler applies a few minutes of jitter, so the
+// routine may not start until ~12:05, and it then runs five agents
+// concurrently before assembling, committing and pushing. Half an hour was
+// too tight; the failure mode is a silently empty inbox, since a missing file
+// is handled by logging and returning.
+// Timezone is pinned explicitly because node-cron otherwise uses the host's
+// local time, and "13:00" would quietly mean something else if the droplet's
+// TZ ever changes.
+cron.schedule('0 13 * * 1-5', emailDailyReport, { timezone: 'UTC' });
 
 // SPA fallback - serve index.html for non-API routes
 app.get('*', (req, res) => {

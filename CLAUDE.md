@@ -14,6 +14,7 @@ Know which zone you are in before you change anything.
 |---|---|---|
 | repo root | the app: `server.js`, `src/`, `index.html`, `tests/` | **yes** |
 | `packages/` | never-deployed satellites. Today: `packages/world` (Agent World) | no |
+| `business/` | markdown the non-engineering agents own: roadmap, brand, research, finance | inert |
 
 **Two brands, one process.** The same Node process, the same Vite bundle and the
 same SQLite file serve both **PokéWatch** (the collector tool — portfolio,
@@ -31,6 +32,13 @@ but must never be imported by it. **Adding a `workspaces` key to the root
 satellite. `packages/world` runs Vite 8 against the root's Vite 7; that only
 works because nothing links them.
 
+**`business/` is markdown, and only markdown.** It is "inert" rather than "no"
+in the table above because `git reset --hard` does ship it to the droplet — it
+just lands as files nothing reads. Two rules keep it that way: **no file in
+`src/` or `server.js` may ever import or read from it**, and **nothing goes in
+there you would not publish** — no customer names, order IDs, emails, or keys,
+since it sits on a box serving public HTTP. See `business/README.md`.
+
 Two things that follow:
 
 - **Don't move the app under `packages/`.** `DB_PATH` defaults to
@@ -43,7 +51,9 @@ Two things that follow:
 ## Orientation in 30 seconds
 
 - **Backend**: one file. `server.js` (~1.7k lines) holds every route, the DB
-  schema, auth, the PokeTrace/pokemontcg.io calls, Stripe, and the cron job.
+  schema, auth, the PokeTrace/pokemontcg.io calls, Stripe, and two cron jobs
+  (`grep -n 'cron.schedule' server.js` — the 6-hourly price scan and the weekday
+  daily-report email).
   There is no `routes/`, `controllers/`, or `models/` split, and no
   `express.Router()` — every route is `app.*` on one instance. This is
   deliberate; do not decompose it as a drive-by. The storefront's ~11 routes sit
@@ -98,7 +108,26 @@ committed alongside them in `.claude/skills/` and pinned in `skills-lock.json`.
 
 ## Agents
 
-Delegation roster and rules: [.claude/agents/README.md](.claude/agents/README.md).
+Two tiers: seven executives that decide and route (`cto`, `cpo`, `cfo`, `cmo`,
+`vp-support`, `vp-design`, `vp-research`), over workers that do the repetitive
+half. Only `cto`'s workers — `backend`, `frontend`, `verifier`, `release-guard` —
+may touch code; every other executive and worker is fenced to `business/` and to
+drafting. `cfo` never moves money, `cmo` never publishes, `vp-support` never
+sends.
+
+Five of them — `cto`, `cpo`, `cmo`, `vp-design`, `vp-research` — file a daily
+report section into `business/daily/` via the `daily-report` skill. Every claim
+in it carries evidence, and "no change" is a correct answer.
+
+They work from `business/tenets.md`, a human-owned constitution of ordered
+tenets. Goals come in two classes: `business/goals.md` is human-directed and
+always wins; `business/<domain>/goals.md` is written by the owning agent and
+scoped strictly to improving its own repetitive work. A tenet past its cadence
+with an unmoved `Last acted` date is reported stale — that is how the scanning
+tenets avoid quietly rotting.
+
+Org chart, model choices and the seams between roles:
+[.claude/agents/README.md](.claude/agents/README.md).
 
 ## House rules
 

@@ -1,5 +1,11 @@
 node_modules/
 .env
+# Any .env variant (.env.local, .env.bak-*, .env.save from a nano crash) is a
+# plaintext secrets file. `git reset --hard` never removes untracked files, so
+# one left on the droplet lingers forever. .env.example is the deliberate
+# exception and stays tracked.
+.env.*
+!.env.example
 *.db
 .DS_Store
 Thumbs.db
