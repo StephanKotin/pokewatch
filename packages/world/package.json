@@ -1,0 +1,24 @@
+{
+  "name": "world",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent World \u2014 a pixel dispatch console for this repo's Claude Code agents. Local dev only; never deployed to the droplet.",
+  "scripts": {
+    "dev": "vite",
+    "dev:bridge": "node bridge/server.js",
+    "dev:all": "concurrently --kill-others --names bridge,world --prefix-colors magenta,cyan \"npm:dev:bridge\" \"npm:dev\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check:maps": "node scripts/check-maps.mjs",
+    "check:sheets": "node scripts/check-sheets.mjs"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "phaser": "^4.2.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "vite": "^8.3.0"
+  }
+}
