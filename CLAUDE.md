@@ -82,7 +82,7 @@ Two things that follow:
 
 ## Knowledge lives in skills, not in prompts
 
-Four hand-written skills carry the expensive, hard-won knowledge. Load them
+These hand-written skills carry the expensive, hard-won knowledge. Load them
 rather than re-deriving it:
 
 | Skill | Owns |
@@ -91,6 +91,7 @@ rather than re-deriving it:
 | `poketrace-api-expert` | PokeTrace API: `/api/prices`, `/api/price-history`, `/api/listings`, `price_snapshots`, plan-tier gating |
 | `catalogue-sync` | `/api/sets`, `/api/sets/:slug/cards`, `/api/cards/search`, `Catalogue.jsx`, `eraMap.js`, `editions.js` |
 | `agent-world` | `packages/world` — the local agent dispatch console: its bridge, clearance model, transcript redaction, tilemaps and art |
+| `architecture-scorecard` | Rating the architecture-quality impact of a change: the seven dimensions, the current baseline, the composite cap, anti-gaming rules |
 
 Stripe work is covered by the eight vendored `stripe-*` / `connect-*` skills,
 committed alongside them in `.claude/skills/` and pinned in `skills-lock.json`.
@@ -114,5 +115,17 @@ Delegation roster and rules: [.claude/agents/README.md](.claude/agents/README.md
 - **`user_id` comes from the verified token, never from a body or query param.**
 - **Verify UI changes in the real app**, not just by reading the diff. See the
   `verifier` agent and the `run` skill.
+- **Report the architecture impact of a major change, and defend it.** A new
+  route, table, column, dependency, env var, deploy step, auth path or package —
+  or anything touching money, user data or the deploy pipeline — ends with a
+  per-dimension delta, a stated trade-off, and a falsifier. Load
+  `architecture-scorecard` for the rubric, the current baseline and the
+  anti-gaming rules. Two consequences worth knowing before you start, because
+  they change what is worth building: the composite is capped at
+  `min(data safety, recoverability, security) + 2`, so **no amount of clean code
+  raises it past 5 until the database has a restore-tested backup**; and most
+  good feature work scores zero across every dimension, which is a success, not
+  a failing grade. Trivial changes say `Architecture impact: none` in one line —
+  filing a report to look thorough is how the rubric stops being read.
 - Prefer editing `server.js` in place over introducing a new backend file. If a
   split is genuinely warranted, raise it — don't perform it silently.

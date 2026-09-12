@@ -9,7 +9,7 @@ interchangeable.
      ▼
   skills/              what is expensive to re-derive
      │                 cto · poketrace-api-expert · catalogue-sync · agent-world
-     │                 · stripe-*
+     │                 · architecture-scorecard · stripe-*
      │                 Loaded on demand, by any agent, in any session.
      ▼
   agents/              who does the work in a separate context window
@@ -93,10 +93,10 @@ fresh clone silently lost all of them.
 npm ci
 ```
 
-That's all. `.claude/skills/` holds all twelve skills as **real committed files** —
-the four hand-written ones and the eight vendored from `docs.stripe.com`. There
-is no separate vendoring step, no `.agents/` directory, and no symlinks to
-dangle.
+That's all. `.claude/skills/` holds every skill as **real committed files** — the
+hand-written ones (see CLAUDE.md's table) plus eight vendored from
+`docs.stripe.com`. There is no separate vendoring step, no `.agents/` directory,
+and no symlinks to dangle.
 
 This is a deliberate change from the original symlink layout, made after testing
 the alternatives:
@@ -111,9 +111,12 @@ the alternatives:
   in a clean directory that produced **49 top-level dotfile directories and
   21MB**. Never run it here.
 
-Committed real files cost 484K and remove both failure modes. The lockfile still
-earns its place as an integrity record: re-vendoring reproduces all eight
-`computedHash` values byte-for-byte identically.
+Committed real files cost about half a megabyte (`du -sh .claude/skills`) and
+remove both failure modes. Stated as a command rather than a number on purpose —
+a hardcoded size goes stale on every skill added, silently, which is the same
+failure the line-number citations had. The lockfile still earns its place as an
+integrity record: re-vendoring reproduces all eight `computedHash` values
+byte-for-byte identically.
 
 ### Updating or re-adding the vendored skills
 
