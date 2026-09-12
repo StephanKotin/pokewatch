@@ -3,10 +3,20 @@ node_modules/
 *.db
 .DS_Store
 Thumbs.db
-.claude/
-# Vendored agent skills, fetched via `npx skills add`. Regenerable from
-# skills-lock.json (which IS committed), and large enough to drown a diff —
-# same reasoning as .claude/ above.
+# Claude Code config. The shared agent architecture (agents/, the hand-written
+# skills/, and the reviewed permission allowlist) IS committed — it's the
+# project's own tooling and a fresh clone should get it. settings.local.json is
+# NOT: it's machine-local, accumulates per-approval entries, and those entries
+# can embed live API keys.
+.claude/*
+!.claude/agents/
+!.claude/skills/
+!.claude/settings.json
+# Defensive only: this project installs skills scoped to claude-code, which
+# writes real files into .claude/skills/ and never creates .agents/. An
+# UNSCOPED `npx skills add <src> --all` would create .agents/ plus ~49 other
+# per-tool directories; this keeps the stray copy out of a commit if that
+# happens. See .claude/agents/README.md for the correct install command.
 .agents/
 dist/
 playwright-report/
