@@ -62,8 +62,16 @@ This is the structural fact that no amount of reading a single file will tell yo
   products/checkout/admin routes. Find them with
   `grep -n 'stripe\|/api/products\|/api/checkout\|/api/admin' server.js`.
 
-Both are one Vite bundle, one `express.static`, one SPA, one SQLite file, one
-systemd unit. The storefront is a set of tabs in the same `TAB_PATHS` map,
+Each product has its own base URL — `APP_BASE_URL` for the collector tool,
+`STORE_BASE_URL` for the store (defaulting to it) — so Stripe returns a buyer to
+the site they shopped on and approval emails point at the tracker. These are
+static values on purpose: `trust proxy` is a hop count, which makes Express
+honour `X-Forwarded-Host` unconditionally, so **never derive an outbound URL
+from `req.hostname`.** Still unbuilt, and waiting on a hostname that does not
+exist yet: the client half — per-brand title, favicon, nav and default tab.
+
+Otherwise both are one Vite bundle, one `express.static`, one SPA, one SQLite
+file, one systemd unit. The storefront is a set of tabs in the same `TAB_PATHS` map,
 rendered *above* the login gate via `PUBLIC_TABS` — the split between the two
 products is auth-gate ordering, not routing. There is no second process and no
 vhost per brand; don't propose one, it re-splits what one-process-two-brands
@@ -96,9 +104,13 @@ Ten tables, all in `server.js`'s single `db.exec(...)` block (`grep -n 'CREATE T
 - **Storefront**: `products`, `orders`, `order_items`
 - **Shared**: `users`, `app_cache` (a generic KV used by both catalogue and price caching)
 
-**The seam between the two products is unusually clean, and worth keeping that way.** The only declared `REFERENCES` in the entire schema is `user_settings.user_id → users(id)`; every other user scoping is a bare `TEXT` column with no FK constraint. `orders.user_id` and `orders.email` both exist, but only `email` is written today (by `fulfillOrder`, from Stripe's `customer_details`) — the storefront is guest checkout, so orders are not yet linked to collector accounts. The *only* live coupling between the two products is `users.role`, which `requireAdmin` reads to gate `/api/admin/*`.
+**The seam between the two products is deliberately narrow.** The only declared `REFERENCES` in the entire schema is `user_settings.user_id → users(id)`; every other user scoping is a bare `TEXT` column with no FK constraint. The two live couplings are `users.role`, which `requireAdmin` reads to gate `/api/admin/*`, and `orders.user_id`, which links a store order to a collector account. Don't add a third without deciding to.
 
-The intended direction is that accounts **converge** — a buyer's orders should eventually appear in their collector account, via `orders.user_id`. Note the consequence before proposing anything: linking on an *unverified* email would let someone register as `victim@example.com` and inherit their guest orders, including a shipping address. The project has no email verification, but it does have the admin approval gate, which is the natural place to do the linking.
+**Accounts converge, and the linking rule is load-bearing** (`grep -n 'linkGuestOrders\|optionalAuth' server.js`). An order acquires its `user_id` on one of three paths: at checkout when the buyer is signed in; in `fulfillOrder`, matching Stripe's `customer_details.email` against `users`; or via `linkGuestOrders`, called from the **admin approval route and from login — never from registration.**
+
+That exclusion is a security decision, not an oversight. With no email verification, an address at registration is only a claim, so linking there would let someone sign up as `victim@example.com` and inherit their orders, shipping address included. Approval is a human checking the address, and is the only identity verification this app has. Login is safe without a human because the harm runs the other way: the email on an order was typed into Stripe by whoever paid, so a wrong one exposes the *payer's* own order to the real owner of that address.
+
+The other invariant on this path: **`/api/checkout` must never answer 401.** It uses `optionalAuth`, which attaches a user when a token is present and calls `next()` regardless, because `src/api/poketrace.js`'s `handle401` deletes the token and reloads the page — a 401 there signs a customer out mid-payment. `tests/orders.spec.js` asserts 503-not-401 across four shapes of bad header.
 
 `watchlist`/`portfolio` rows are scoped to a user via a `user_id` column that was **added after the tables were**, through the ALTER-and-catch pattern — this tells you the intended workflow for schema changes here: add the column to the `CREATE TABLE IF NOT EXISTS` block for new installs *and* add a matching `ALTER TABLE ... ADD COLUMN` wrapped in `try/catch` for existing ones, in the same change. Never assume a column exists on an existing DB just because it's in the `CREATE TABLE` block — the DB on the droplet predates most of them.
 
