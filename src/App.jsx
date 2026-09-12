@@ -23,6 +23,7 @@ import ProductDetail from './pages/ProductDetail';
 import Cart from './pages/Cart';
 import CheckoutResult from './pages/CheckoutResult';
 import Admin from './pages/Admin';
+import Orders from './pages/Orders';
 
 const TAB_PATHS = {
   portfolio: '/',
@@ -33,6 +34,7 @@ const TAB_PATHS = {
   settings: '/settings',
   store: '/store',
   cart: '/cart',
+  orders: '/orders',
   checkoutSuccess: '/checkout/success',
   checkoutCancel: '/checkout/cancel',
   admin: '/admin',
@@ -248,12 +250,21 @@ export default function App() {
         {activeTab === 'cart' && (
           <Cart cart={cart} onGoToShop={() => setActiveTab('store')} toast={toast} />
         )}
+        {activeTab === 'orders' && <Orders />}
         {activeTab === 'checkoutSuccess' && (
           <CheckoutResult
             status="success"
+            user={user}
             onGoToShop={() => {
               cart.clear();
               setActiveTab('store');
+            }}
+            // Must clear the cart too, not just navigate: this is the second
+            // way off the success page, and leaving it out would send a buyer
+            // to their orders while still holding the items they just paid for.
+            onViewOrders={() => {
+              cart.clear();
+              setActiveTab('orders');
             }}
           />
         )}

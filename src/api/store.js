@@ -13,6 +13,13 @@ export async function createCheckoutSession(items) {
   return apiPost('/api/checkout', { items });
 }
 
+// The signed-in buyer's own orders. Scoped server-side by the token's user id,
+// so there is nothing to pass here. Includes orders placed as a guest on the
+// same email address, which get attached when the account is approved.
+export async function fetchMyOrders() {
+  return apiGet('/api/orders');
+}
+
 // --- Admin ---
 
 export async function fetchAdminProducts() {

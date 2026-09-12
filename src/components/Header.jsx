@@ -42,6 +42,16 @@ export default function Header({ activeTab, onTabChange, user, onLogout, onLogoC
         )}
         {user && (
           <>
+            {/* Signed-in only, and an icon rather than a tab: a buyer checks
+                this occasionally, unlike the collector tabs they live in. */}
+            <button
+              className={`settings-icon-btn${activeTab === 'orders' ? ' active' : ''}`}
+              onClick={() => onTabChange('orders')}
+              title="My Orders"
+              aria-label="My Orders"
+            >
+              &#128230;
+            </button>
             <button
               className={`settings-icon-btn${activeTab === 'settings' ? ' active' : ''}`}
               onClick={() => onTabChange('settings')}

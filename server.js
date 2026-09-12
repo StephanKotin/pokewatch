@@ -663,6 +663,49 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// Like `authenticate`, but for routes that must work for signed-out visitors:
+// attaches req.userId when there's a valid token and calls next() either way.
+//
+// It MUST NOT return 401 on any path, including an expired or malformed token.
+// src/api/poketrace.js sends the Authorization header on every request, and its
+// handle401 deletes the stored token and reloads the page — so a 401 from a
+// route a shopper can reach (checkout, above all) signs them out with a full
+// page reload in the middle of paying. An invalid token here means "treat this
+// as a guest", never "throw them out".
+function optionalAuth(req, res, next) {
+  const header = req.headers.authorization;
+  if (header && header.startsWith('Bearer ')) {
+    try {
+      req.userId = jwt.verify(header.slice(7), JWT_SECRET).userId;
+    } catch (e) {
+      // Deliberately ignored — see above.
+    }
+  }
+  next();
+}
+
+// Attach a user's past guest orders to their account, matched on email.
+//
+// Called from the admin approval route and from login, never from
+// registration: the app has no email verification, so at registration time an
+// address is just a claim. Registering as someone else's email would otherwise
+// inherit their orders — including the shipping address on them. Admin
+// approval is a human looking at the address before letting the account in,
+// which makes it the only verification step this app actually has.
+//
+// Lowercased on both sides because registration and login both normalize.
+// Idempotent: only ever claims rows that no account owns yet.
+function linkGuestOrders(userId, email) {
+  if (!userId || !email) return 0;
+  const result = db.prepare(
+    'UPDATE orders SET user_id = ?, updated_at = strftime(\'%s\',\'now\') WHERE user_id IS NULL AND lower(email) = ?'
+  ).run(userId, String(email).toLowerCase());
+  if (result.changes > 0) {
+    console.log(`[orders] linked ${result.changes} guest order(s) to user ${userId}`);
+  }
+  return result.changes;
+}
+
 // CSP is left off: the built page pulls Google Fonts' stylesheet and talks
 // to PostHog cross-origin, both of which a default CSP would block, and
 // there's no staging environment to catch that kind of breakage before it
@@ -708,6 +751,19 @@ function fulfillOrder(session) {
     session.amount_total ?? order.subtotal_cents,
     order.id
   );
+
+  // A buyer who was signed out at checkout has no user_id yet, but Stripe just
+  // told us the email they paid with. If that address already belongs to an
+  // account, claim the order for it now. Safe to trust here in a way a
+  // self-asserted address at registration is not: Stripe collected it during a
+  // completed payment, not from a form anyone can type into.
+  //
+  // Inside the `status === 'paid'` guard above on purpose — Stripe retries
+  // deliveries that don't 2xx in time, and a retry must not re-run this.
+  if (!order.user_id && details.email) {
+    const account = db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(String(details.email).toLowerCase());
+    if (account) linkGuestOrders(account.id, details.email);
+  }
 
   const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(order.id);
   const decrementStock = db.prepare('UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?');
@@ -835,11 +891,19 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
   if (ADMIN_EMAIL) {
     const approveUrl = `${APP_BASE_URL}/api/admin/approve/${approvalToken}`;
     const rejectUrl = `${APP_BASE_URL}/api/admin/reject/${approvalToken}`;
+    // Approving is what links past guest orders on this address to the new
+    // account (see linkGuestOrders), so say so here rather than letting it
+    // happen invisibly — this is the moment a human decides the address is
+    // genuinely theirs, and an order carries a shipping address.
+    const pendingOrders = db.prepare(
+      'SELECT COUNT(*) AS n FROM orders WHERE user_id IS NULL AND lower(email) = ?'
+    ).get(normalizedEmail).n;
     sendEmail({
       to: ADMIN_EMAIL,
       subject: `PokeWatch: approve ${normalizedEmail}?`,
       html: `
         <p><strong>${normalizedEmail}</strong> just requested a PokeWatch account.</p>
+        ${pendingOrders > 0 ? `<p style="background:#fff4e5;border-left:3px solid #f59e0b;padding:8px 12px;">Heads up: this address has <strong>${pendingOrders}</strong> past store order${pendingOrders === 1 ? '' : 's'}. Approving will link ${pendingOrders === 1 ? 'it' : 'them'} — including the shipping address — to this account.</p>` : ''}
         <p>
           <a href="${approveUrl}" style="background:#57cc99;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;margin-right:8px;">Approve</a>
           <a href="${rejectUrl}" style="background:#e63946;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;">Reject</a>
@@ -868,6 +932,24 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
   if (user.status === 'pending') return res.status(403).json({ error: 'Your account is still awaiting approval' });
   if (user.status === 'rejected') return res.status(403).json({ error: 'This account request was declined' });
+
+  // Catches guest orders placed between approval and this sign-in, and — the
+  // case that actually matters on rollout — orders that existing, already
+  // approved accounts placed before any of this existed. For them the approval
+  // route already ran long ago, so login is the only hook left.
+  //
+  // Unlike registration, this is safe to do without a human in the loop, and
+  // the reason is the direction of the harm rather than the strength of the
+  // check. The email on an order was typed into Stripe Checkout by whoever
+  // paid. If it doesn't belong to them, what leaks is the *payer's* own order
+  // and shipping address, to the person who really owns that address — the
+  // same thing that happens when anyone mistypes an email on a receipt.
+  // Registration inverts that: there, a stranger asserts an address to claim
+  // someone else's order, which is why that path waits for admin approval.
+  //
+  // Idempotent — it only ever matches rows no account owns yet — so running it
+  // on every login usually updates nothing.
+  linkGuestOrders(user.id, user.email);
 
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
   res.json({ token, user: { id: user.id, email: user.email, hasOnboarded: !!user.has_onboarded, role: user.role } });
@@ -904,12 +986,20 @@ app.get('/api/admin/approve/:token', (req, res) => {
   const user = db.prepare("SELECT * FROM users WHERE approval_token = ? AND status = 'pending'").get(req.params.token);
   if (!user) return res.status(404).send(approvalPage('Request not found or already handled.', '#94a3b8'));
   db.prepare("UPDATE users SET status = 'approved', approval_token = NULL WHERE id = ?").run(user.id);
+  // Approving is the one point where a human has vouched for this address, so
+  // it's where past guest orders on it become theirs.
+  const linked = linkGuestOrders(user.id, user.email);
   sendEmail({
     to: user.email,
     subject: 'Your PokeWatch account is approved!',
     html: `<p>You're approved — <a href="${APP_BASE_URL}">sign in here</a>.</p>`,
   }).catch(() => {});
-  res.send(approvalPage(`Approved ${user.email}.`, '#57cc99'));
+  res.send(approvalPage(
+    linked > 0
+      ? `Approved ${user.email}, and linked ${linked} past order${linked === 1 ? '' : 's'}.`
+      : `Approved ${user.email}.`,
+    '#57cc99'
+  ));
 });
 
 app.get('/api/admin/reject/:token', (req, res) => {
@@ -1453,7 +1543,12 @@ app.get('/api/products/:id', (req, res) => {
 // creates the order row up front as 'pending' so the webhook above only has
 // to flip its status by stripe_checkout_session_id, not reconstruct the cart
 // from Stripe's session payload.
-app.post('/api/checkout', async (req, res) => {
+// optionalAuth, not authenticate: the store is deliberately guest checkout, so
+// this route has to work with no token at all. When a signed-in collector buys
+// something we record who they are, which is what makes the order show up in
+// their account later — but a guest must never be turned away, and a stale
+// token must never 401 (see optionalAuth).
+app.post('/api/checkout', optionalAuth, async (req, res) => {
   if (!stripe) return res.status(503).json({ error: 'Store checkout is not configured yet.' });
   const { items } = req.body;
   if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'Cart is empty' });
@@ -1491,9 +1586,16 @@ app.post('/api/checkout', async (req, res) => {
       });
     }
 
+    // A signed-in buyer's order is owned from the moment it's created. A
+    // guest's stays unowned (user_id NULL) until either the webhook or a later
+    // approval/login matches its email — see fulfillOrder and linkGuestOrders.
+    const buyer = req.userId
+      ? db.prepare('SELECT id, email FROM users WHERE id = ?').get(req.userId)
+      : null;
+
     const orderId = crypto.randomUUID();
-    db.prepare('INSERT INTO orders (id, status, subtotal_cents, total_cents) VALUES (?, ?, ?, ?)')
-      .run(orderId, 'pending', subtotalCents, subtotalCents);
+    db.prepare('INSERT INTO orders (id, status, user_id, email, subtotal_cents, total_cents) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(orderId, 'pending', buyer?.id ?? null, buyer?.email ?? null, subtotalCents, subtotalCents);
     const insertItem = db.prepare(
       'INSERT INTO order_items (order_id, product_id, name_snapshot, price_cents_snapshot, quantity) VALUES (?, ?, ?, ?, ?)'
     );
@@ -1521,7 +1623,13 @@ app.post('/api/checkout', async (req, res) => {
           delivery_estimate: { minimum: { unit: 'business_day', value: 3 }, maximum: { unit: 'business_day', value: 7 } },
         },
       }],
-      metadata: { orderId },
+      // Prefilling from the account means the receipt address matches the one
+      // the order is already linked to, instead of the buyer typing a second
+      // address that then looks like a different person.
+      ...(buyer?.email ? { customer_email: buyer.email } : {}),
+      // userId rides along as a cross-check for the webhook; orderId is still
+      // the thing fulfilment looks the order up by.
+      metadata: { orderId, ...(buyer?.id ? { userId: buyer.id } : {}) },
       success_url: `${STORE_BASE_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${STORE_BASE_URL}/checkout/cancel`,
     });
@@ -1563,6 +1671,21 @@ app.delete('/api/admin/products/:id', authenticate, requireAdmin, (req, res) => 
   // orphan past orders' line items instead of just hiding the product.
   db.prepare('UPDATE products SET active = 0 WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+});
+
+// A buyer's own orders. `authenticate`, not `optionalAuth` — there is nothing
+// to show a guest, and unlike checkout this is never on a payment path, so a
+// 401 here is the correct answer rather than a footgun.
+//
+// Scoped by req.userId from the verified token, never by anything in the query
+// string. Only paid orders: a 'pending' row is an abandoned Stripe session, not
+// something a customer should see listed as an order.
+app.get('/api/orders', authenticate, (req, res) => {
+  const orders = db.prepare(
+    "SELECT id, status, email, shipping_name, shipping_address, subtotal_cents, shipping_cents, tax_cents, total_cents, created_at FROM orders WHERE user_id = ? AND status != 'pending' ORDER BY created_at DESC"
+  ).all(req.userId);
+  const itemsStmt = db.prepare('SELECT name_snapshot, price_cents_snapshot, quantity FROM order_items WHERE order_id = ?');
+  res.json(orders.map((o) => ({ ...o, items: itemsStmt.all(o.id) })));
 });
 
 app.get('/api/admin/orders', authenticate, requireAdmin, (req, res) => {

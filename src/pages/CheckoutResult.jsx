@@ -1,7 +1,7 @@
 import React from 'react';
 import './CheckoutResult.css';
 
-export default function CheckoutResult({ status, onGoToShop }) {
+export default function CheckoutResult({ status, onGoToShop, onViewOrders, user }) {
   const success = status === 'success';
   return (
     <div className="checkout-result-page">
@@ -12,6 +12,13 @@ export default function CheckoutResult({ status, onGoToShop }) {
           ? "Thanks for your order — a confirmation email is on its way."
           : "No charge was made. Your cart is still saved if you'd like to try again."}
       </p>
+      {/* Only offered to signed-in buyers: a guest's order isn't attached to
+          any account yet, so the page would just look empty to them. */}
+      {success && user && onViewOrders && (
+        <button className="btn btn-primary" onClick={onViewOrders}>
+          View My Orders
+        </button>
+      )}
       <button className="btn btn-primary" onClick={onGoToShop}>
         Back to Shop
       </button>
