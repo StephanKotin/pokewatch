@@ -1,0 +1,13 @@
+# Vendored Stripe skills: fetched from docs.stripe.com via `npx skills add`,
+# not hand-written. Marked so they don't skew language stats and so GitHub
+# collapses them by default in review — 33 files that would otherwise drown
+# any diff that re-vendors them. Still fully expandable, which is the point:
+# these run with full agent permissions, so drift should stay auditable.
+.claude/skills/stripe-apps/**                              linguist-vendored=true linguist-generated=true
+.claude/skills/stripe-best-practices/**                    linguist-vendored=true linguist-generated=true
+.claude/skills/stripe-directory/**                         linguist-vendored=true linguist-generated=true
+.claude/skills/stripe-docs/**                              linguist-vendored=true linguist-generated=true
+.claude/skills/stripe-projects/**                          linguist-vendored=true linguist-generated=true
+.claude/skills/upgrade-stripe/**                           linguist-vendored=true linguist-generated=true
+.claude/skills/connect-recommend/**                        linguist-vendored=true linguist-generated=true
+.claude/skills/connect-required-verification-information/** linguist-vendored=true linguist-generated=true

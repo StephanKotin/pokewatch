@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm run dev)",
+      "Bash(npm run server)",
+      "Bash(npm run build)",
+      "Bash(npm run preview)",
+      "Bash(npm ls *)",
+      "Bash(npx playwright test *)",
+      "Bash(npx playwright install *)",
+      "Bash(npm run dev:all)",
+      "Bash(npm run dev:bridge)",
+      "Bash(npm run check:maps)",
+      "Bash(npm run check:sheets)",
+      "Bash(command -v *)",
+      "Bash(mkdir -p *)",
+      "Bash(ps -p *)",
+      "Bash(lsof -ti:* -sTCP:LISTEN)",
+      "Bash(lsof -i :* -sTCP:LISTEN)",
+      "Bash(lsof -iTCP -sTCP:LISTEN -P)",
+      "Bash(curl -s http://localhost:*)",
+      "Bash(curl -i http://localhost:*)",
+      "Bash(curl -sI http://localhost:*)",
+      "Bash(curl -s -o /dev/null http://localhost:*)",
+      "Bash(curl -s http://127.0.0.1:*)",
+      "Bash(curl -i http://127.0.0.1:*)",
+      "Bash(curl -sI http://127.0.0.1:*)",
+      "Bash(curl -s https://api.pokemontcg.io/v2/**)",
+      "Bash(sqlite3 pokewatch.db \".schema *)",
+      "Bash(sqlite3 pokewatch.db \"SELECT *)",
+      "Bash(sqlite3 pokewatch.db \"select *)",
+      "Bash(gh run *)",
+      "Read(//tmp/**)",
+      "WebSearch"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(**/.env)",
+      "Read(**/*.db)",
+      "Read(**/settings.local.json)",
+      "Read(packages/world/.world/**)",
+      "Bash(cat .env)",
+      "Bash(cat ./.env)"
+    ]
+  }
+}
