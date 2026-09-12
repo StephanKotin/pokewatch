@@ -93,7 +93,28 @@ if (!JWT_SECRET) {
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const EMAIL_FROM = process.env.EMAIL_FROM || 'PokeWatch <onboarding@resend.dev>';
-const APP_BASE_URL = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+// Trailing slashes are stripped rather than documented away: every use below
+// interpolates as `${BASE}/path`, so a stray slash yields `//checkout/success`,
+// and in the CORS list it silently never matches a browser's Origin header
+// (which never has one). Both failures happen in production, on a value that
+// gets hand-edited into a .env on the droplet.
+const stripTrailingSlash = (url) => url.replace(/\/+$/, '');
+
+const APP_BASE_URL = stripTrailingSlash(process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`);
+// One process serves two products, and they do not share a front door. The
+// collector tool's links (approval emails, "sign in here") belong on the
+// tracker's host; the store's Stripe return URLs belong on the store's, or a
+// buyer finishes paying on tcgoftexas.com and lands somewhere else entirely.
+//
+// Kept as two static values rather than derived from req.hostname on purpose.
+// Every call site below already knows which product it belongs to, so host
+// derivation would only add a trust question: `trust proxy` is set to a hop
+// count above, which makes Express honour X-Forwarded-Host unconditionally
+// whenever it is present. A constant can't be spoofed.
+//
+// Defaults to APP_BASE_URL so a droplet that hasn't set it behaves exactly as
+// before.
+const STORE_BASE_URL = stripTrailingSlash(process.env.STORE_BASE_URL || APP_BASE_URL);
 
 // No fallback here either, but unlike JWT_SECRET this doesn't fail boot —
 // the store is a distinct subsystem from the tracker, so a site with no
@@ -649,10 +670,13 @@ function requireAdmin(req, res, next) {
 // nosniff, etc.) carry no such risk.
 app.use(helmet({ contentSecurityPolicy: false }));
 // The app only ever calls its own /api/* routes same-origin (via the Vite
-// dev proxy locally, and served directly in production), so this never
-// needs to allow a second origin — it only closes off third-party pages
-// making cross-origin requests against this API.
-app.use(cors({ origin: APP_BASE_URL }));
+// dev proxy locally, and served directly in production), so this only closes
+// off third-party pages making cross-origin requests against this API. It
+// does need one entry per front door, though: the tracker and the store are
+// separate origins served by this same process, and whichever one is missing
+// here would have its own fetches rejected. Deduped because the two are the
+// same value until STORE_BASE_URL is actually set.
+app.use(cors({ origin: [...new Set([APP_BASE_URL, STORE_BASE_URL])] }));
 
 // Applies stripe.checkout.sessions.create's result to our own order record:
 // marks it paid, decrements stock, emails buyer + admin. Split out from the
@@ -1498,8 +1522,8 @@ app.post('/api/checkout', async (req, res) => {
         },
       }],
       metadata: { orderId },
-      success_url: `${APP_BASE_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${APP_BASE_URL}/checkout/cancel`,
+      success_url: `${STORE_BASE_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${STORE_BASE_URL}/checkout/cancel`,
     });
 
     db.prepare('UPDATE orders SET stripe_checkout_session_id = ? WHERE id = ?').run(session.id, orderId);
