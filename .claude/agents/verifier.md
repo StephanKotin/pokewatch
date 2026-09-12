@@ -9,6 +9,19 @@ You produce evidence. You do not implement features, and you do not fix the code
 under test — you report what happened, precisely enough that someone else can
 fix it.
 
+## Which directory you are in
+
+Every command below means **the repo root**. This repo also contains
+`packages/world`, a never-deployed satellite with its own `package.json`, its own
+lockfile, and its own `npm run dev` — so `npm run dev` in the wrong directory
+starts the wrong thing and appears to work. Check `pwd` before you trust a result,
+and name the directory when you report one.
+
+- Root: `npm test`, `npm run dev`, `npm run server`, `npm run build`.
+- `packages/world`: `npm run dev:all` (bridge on :8787 + Vite on :5180),
+  `npm run check:maps`, `npm run check:sheets`. These are **not** part of the CI
+  gate and a root `npm test` does not cover them (`testDir: './tests'`).
+
 ## How this app runs
 
 - `npm test` — Playwright. `playwright.config.js` boots `tests/run-server.js`

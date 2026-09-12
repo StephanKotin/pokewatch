@@ -8,7 +8,8 @@ interchangeable.
      │                 (stack, deploy pipeline, house rules)
      ▼
   skills/              what is expensive to re-derive
-     │                 cto · poketrace-api-expert · catalogue-sync · stripe-*
+     │                 cto · poketrace-api-expert · catalogue-sync · agent-world
+     │                 · stripe-*
      │                 Loaded on demand, by any agent, in any session.
      ▼
   agents/              who does the work in a separate context window
@@ -29,6 +30,15 @@ a skill. When you find a new *kind of task*, it may warrant an agent.
 | `frontend` | `src/` — pages, hooks, colocated CSS, the hand-rolled tab router | full | opus |
 | `verifier` | Proving a change works in the real running app; Playwright | read + bash | sonnet |
 | `release-guard` | Pre-push: will this survive `git reset --hard` on the droplet? | read + bash | opus |
+
+**`packages/world` has no agent, by design.** Agent World is a satellite with its
+own lockfile that is never deployed and never imported by the app, so there is no
+scope to fence: it cannot break production, and it shares no files with `backend`
+or `frontend`. What it has instead is a large pile of expensive knowledge — silent
+art and tilemap failures, the redaction allowlist, the clearance model. By this
+file's own rule, that makes it a **skill** (`agent-world`), not a fifth agent.
+Load that before touching `packages/world`; note in particular that
+`packages/world/bridge/server.js` is not the `server.js` that `backend` owns.
 
 Built-ins that already cover their ground — don't re-create them:
 
@@ -83,8 +93,8 @@ fresh clone silently lost all of them.
 npm ci
 ```
 
-That's all. `.claude/skills/` holds all eleven skills as **real committed files** —
-the three hand-written ones and the eight vendored from `docs.stripe.com`. There
+That's all. `.claude/skills/` holds all twelve skills as **real committed files** —
+the four hand-written ones and the eight vendored from `docs.stripe.com`. There
 is no separate vendoring step, no `.agents/` directory, and no symlinks to
 dangle.
 
@@ -101,7 +111,7 @@ the alternatives:
   in a clean directory that produced **49 top-level dotfile directories and
   21MB**. Never run it here.
 
-Committed real files cost 404K and remove both failure modes. The lockfile still
+Committed real files cost 484K and remove both failure modes. The lockfile still
 earns its place as an integrity record: re-vendoring reproduces all eight
 `computedHash` values byte-for-byte identically.
 
@@ -122,6 +132,34 @@ files drown a diff. They stay expandable on purpose — vendored skills run with
 full agent permissions, so drift should be auditable.
 
 `.claude/settings.local.json` is intentionally absent — it's per-machine and
-accumulates approval entries that can embed live credentials. Two such entries
-(an expired localhost JWT and a spent admin approval token) were removed from
-the shared `settings.json` when it was brought under version control.
+accumulates approval entries that can embed live credentials.
+
+The shared `settings.json` is a **curated** allowlist, and it has to stay that
+way. It was not one when it was first brought under version control: it was 133
+accumulated session approvals, cut to 32 before the first commit. What came out is
+the useful list of what not to let back in:
+
+- Four `ssh … bash -s` / `sudo bash -s` entries against the droplet — a
+  pre-approved unattended arbitrary-root channel to production. Deleted rather
+  than moved to `settings.local.json`, because local settings apply to dispatched
+  Agent World runs too, so relocating them would not have removed the risk.
+- `Bash(node -e ' *)`, `Bash(python3 -c ' *)`, `Bash(expect -c ' *)` — the largest
+  actual capability in the file: unrestricted local code execution. Note these
+  also bypass every `deny` rule, which constrain the **Read tool** and say nothing
+  about what a subprocess reads. Kept in `settings.local.json`.
+- ~10 `sqlite3 pokewatch.db "DELETE FROM …"` entries carrying a real user UUID and
+  test emails; `doctl compute *` (droplet deletion) and `gh secret *`; an unbounded
+  `xargs -r kill`; dead per-session scratchpad paths; and an
+  `additionalDirectories` entry that was machine-absolute *and* self-referential.
+
+The `deny` list had a genuine bug worth remembering: `Read(./.env)` and
+`Read(./pokewatch.db)` are **cwd-relative**, so they silently stopped matching the
+moment cwd was a subpackage like `packages/world/` — failing open, in the
+direction of secrets. They are now `.env`, `**/.env`, `**/*.db`, plus
+`**/settings.local.json` and `packages/world/.world/**`. Anchoring semantics are
+the thing that was wrong before, so confirm any change to them against
+`/permissions` rather than assuming.
+
+Adding an entry here is a decision about what every future clone and every
+autonomous dispatch may do without asking. If it is specific to this machine, it
+belongs in `settings.local.json`.

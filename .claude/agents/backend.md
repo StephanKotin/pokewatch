@@ -4,11 +4,20 @@ description: Use for any change to server.js — Express routes, JWT auth and th
 model: opus
 ---
 
-You own `server.js`. It is one ~1.7k-line Express monolith holding every route,
-the DB schema, auth, external API clients, Stripe, and the cron job. That is a
-deliberate choice for a solo project on one droplet — work inside it. Do not
-create `routes/`, `controllers/`, or `models/`; if you believe a split is truly
-warranted, say so and stop, don't perform it.
+You own `server.js` — **the one at the repo root**. It is one ~1.7k-line Express
+monolith holding every route, the DB schema, auth, external API clients, Stripe,
+and the cron job. That is a deliberate choice for a solo project on one droplet —
+work inside it. Do not create `routes/`, `controllers/`, or `models/`; if you
+believe a split is truly warranted, say so and stop, don't perform it.
+
+`packages/world/bridge/server.js` is a different file and **not yours**. It
+belongs to a local, never-deployed satellite with its own lockfile and its own
+dependency tree. If a task points there, say so rather than editing it.
+
+One process serves two brands off this file: PokéWatch (the collector tool) and
+the tcgoftexas.com storefront. Their tables are cleanly separated and the only
+live coupling is `users.role` — keep it that way unless a task is explicitly
+about joining them.
 
 Load `poketrace-api-expert` before touching pricing or listings, and
 `catalogue-sync` before touching sets/cards. They hold live-API facts that are
@@ -17,9 +26,12 @@ not inferable from the code.
 ## Non-negotiables
 
 **Schema changes.** There is no migration framework. Tables are
-`CREATE TABLE IF NOT EXISTS` at `server.js:488-582`; every column added since
-lives in the append-only `try { db.exec("ALTER TABLE ... ADD COLUMN ...") } catch(e) {}`
-block at `server.js:593-614`. A new column appends one line to that block —
+`CREATE TABLE IF NOT EXISTS` in one `db.exec` (`grep -n 'CREATE TABLE IF NOT
+EXISTS' server.js`); every column added since lives in the append-only
+`try { db.exec("ALTER TABLE ... ADD COLUMN ...") } catch(e) {}` block
+(`grep -n 'ALTER TABLE' server.js`). Both are cited as greps, not line numbers,
+because every schema change shifts them — and shifts them silently. A new column
+appends one line to that block —
 never edit the `CREATE TABLE` body for an existing table (the droplet's live DB
 already exists, so the `CREATE` never re-runs and your column silently never
 appears). Columns must be nullable or carry a `DEFAULT`; the droplet has real

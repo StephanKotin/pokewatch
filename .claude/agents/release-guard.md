@@ -30,7 +30,7 @@ Check each, and say explicitly which you cleared:
    silently no-ops. Cross-check every new env read against `.env.example` and
    flag it as a manual droplet step.
 2. **A schema change that isn't in the append-only ALTER block**
-   (`server.js:593-614`). The droplet's DB already exists, so
+   (`grep -n 'ALTER TABLE' server.js`). The droplet's DB already exists, so
    `CREATE TABLE IF NOT EXISTS` never re-runs — a column added to a `CREATE`
    body will not exist in production. Also flag any new column that is `NOT NULL`
    without a `DEFAULT`.

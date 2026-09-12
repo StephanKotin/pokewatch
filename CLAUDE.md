@@ -5,30 +5,84 @@ droplet, real user data (accounts, portfolios, Stripe orders). Match engineering
 effort to those stakes — this is not a pre-Series-A platform, and it is also not
 a toy.
 
+## Zones: what this repo actually contains
+
+One repo, two brands served by one process, and satellites that never deploy.
+Know which zone you are in before you change anything.
+
+| Zone | What | Deployed? |
+|---|---|---|
+| repo root | the app: `server.js`, `src/`, `index.html`, `tests/` | **yes** |
+| `packages/` | never-deployed satellites. Today: `packages/world` (Agent World) | no |
+
+**Two brands, one process.** The same Node process, the same Vite bundle and the
+same SQLite file serve both **PokéWatch** (the collector tool — portfolio,
+watchlist, alerts, catalogue, prices) and **tcgoftexas.com** (a storefront for
+singles and sealed product). The storefront is a set of tabs in the same
+`TAB_PATHS` map in `src/App.jsx`, rendered *above* the login gate via
+`PUBLIC_TABS` — so the split between the two products is auth-gate ordering, not
+routing. Don't propose a second process or a vhost per brand.
+
+**`packages/` holds only satellites.** Never deployed, never imported by root
+code, never npm workspaces: each has its own `package.json`, its own lockfile,
+its own `node_modules`. A satellite may *read* the repo (file paths, `.claude/`)
+but must never be imported by it. **Adding a `workspaces` key to the root
+`package.json` is the tripwire** — if you need one, you've stopped building a
+satellite. `packages/world` runs Vite 8 against the root's Vite 7; that only
+works because nothing links them.
+
+Two things that follow:
+
+- **Don't move the app under `packages/`.** `DB_PATH` defaults to
+  `path.join(__dirname, 'pokewatch.db')`. Move `server.js` and `__dirname` moves
+  with it — so unless `DB_PATH` is set on the droplet first, the app boots fine,
+  creates a brand-new empty DB, and every portfolio silently disappears.
+- **"`server.js`" is ambiguous.** There are two: the app's, at the repo root, and
+  `packages/world/bridge/server.js`. Say which one you mean.
+
 ## Orientation in 30 seconds
 
 - **Backend**: one file. `server.js` (~1.7k lines) holds every route, the DB
   schema, auth, the PokeTrace/pokemontcg.io calls, Stripe, and the cron job.
-  There is no `routes/`, `controllers/`, or `models/` split. This is deliberate;
-  do not decompose it as a drive-by.
+  There is no `routes/`, `controllers/`, or `models/` split, and no
+  `express.Router()` — every route is `app.*` on one instance. This is
+  deliberate; do not decompose it as a drive-by. The storefront's ~11 routes sit
+  in three contiguous islands rather than interleaved with the collector's ~19:
+  the Stripe client near the top, `fulfillOrder` + the webhook (which **must**
+  stay mounted before `express.json()` for raw-body signature verification), and
+  the products/checkout/admin routes.
 - **Frontend**: React 19 + Vite 7, no TypeScript, no router library (`src/App.jsx`
   hand-rolls tabs via `TAB_PATHS` + `history.pushState`), no CSS framework (one
   colocated `.css` per component/page). State is plain hooks in `src/hooks/`;
   `AuthContext` is the only shared store.
-- **DB**: SQLite via `better-sqlite3`, synchronous. Schema is `CREATE TABLE IF NOT
-  EXISTS` (`server.js:488-582`) plus an append-only block of
-  `try { ALTER TABLE ... ADD COLUMN } catch {}` (`server.js:593-614`). **No
-  migration framework.** New columns append to that block; nothing else.
+- **DB**: SQLite via `better-sqlite3`, synchronous. Schema is ten
+  `CREATE TABLE IF NOT EXISTS` statements in one `db.exec` (`server.js:487-590`)
+  plus an append-only block of `try { ALTER TABLE ... ADD COLUMN } catch {}`
+  (`server.js:593-622`). **No migration framework.** New columns append to that
+  block; nothing else. The two products' tables are cleanly separated —
+  collector: `watchlist`, `price_snapshots`, `portfolio`, `alerts`,
+  `user_settings`; storefront: `products`, `orders`, `order_items`; shared:
+  `users`, `app_cache`. The only declared foreign key in the whole schema is
+  `user_settings.user_id → users(id)`, and the only live coupling between the two
+  products is `users.role`. Keep that seam clean: don't join a collector table to
+  a storefront table without deciding to.
 - **Deploy**: push to `master` → CI runs Playwright → SSH to the droplet →
   `git reset --hard origin/master` → `npm install` (whose `postinstall` runs
   `vite build`) → `systemctl restart pokewatch`. See `.github/workflows/deploy.yml`.
+  The `deploy` job declares `needs: test`, so a red suite blocks the deploy —
+  that gate is the only safety net in the pipeline (no staging, no rollback but
+  revert-and-repush). Never loosen a spec or the blanked test credentials to get
+  a deploy through. Note what is **not** in the repo and so not protected by
+  `reset --hard`: the Caddyfile, the TLS certs, the Cloudflare DNS records, and
+  the `pokewatch.service` unit. A change needing one of those has a manual step
+  that no diff will show.
 - **Secrets**: `.env` on the droplet, gitignored, survives `reset --hard`. Every
   external API key is server-side only. `VITE_*` vars are the exception — Vite
   bakes them in at **build** time, so they are public by definition.
 
 ## Knowledge lives in skills, not in prompts
 
-Three hand-written skills carry the expensive, hard-won knowledge. Load them
+Four hand-written skills carry the expensive, hard-won knowledge. Load them
 rather than re-deriving it:
 
 | Skill | Owns |
@@ -36,6 +90,7 @@ rather than re-deriving it:
 | `cto` | Whole-system architecture, stack/dependency calls, blast radius, "is this a good idea here" |
 | `poketrace-api-expert` | PokeTrace API: `/api/prices`, `/api/price-history`, `/api/listings`, `price_snapshots`, plan-tier gating |
 | `catalogue-sync` | `/api/sets`, `/api/sets/:slug/cards`, `/api/cards/search`, `Catalogue.jsx`, `eraMap.js`, `editions.js` |
+| `agent-world` | `packages/world` — the local agent dispatch console: its bridge, clearance model, transcript redaction, tilemaps and art |
 
 Stripe work is covered by the eight vendored `stripe-*` / `connect-*` skills,
 committed alongside them in `.claude/skills/` and pinned in `skills-lock.json`.
@@ -51,6 +106,12 @@ Delegation roster and rules: [.claude/agents/README.md](.claude/agents/README.md
   queue. Always check `response.ok` before `response.json()`.
 - **Never widen a `.env` value into the client bundle.** If it isn't already
   `VITE_`-prefixed, it is a secret.
+- **Never return 401 from a route a shopper can hit.** `src/api/poketrace.js`
+  sends the Bearer token on every call, and its `handle401` deletes the token and
+  reloads the page. On `/api/checkout` that signs a customer out mid-payment. Use
+  middleware that attaches a user when one is present and calls `next()`
+  regardless.
+- **`user_id` comes from the verified token, never from a body or query param.**
 - **Verify UI changes in the real app**, not just by reading the diff. See the
   `verifier` agent and the `run` skill.
 - Prefer editing `server.js` in place over introducing a new backend file. If a
