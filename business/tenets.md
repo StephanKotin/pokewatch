@@ -90,8 +90,9 @@ A report that fills an empty period with plausible prose is worse than no report
 because it reads like signal.
 
 - **Cadence:** continuous.
-- **Last acted:** 2026-09-12 — the contract held on the first daily report run;
-  `vp-design` rejected a false premise handed to it in its own prompt.
+- **Last acted:** 2026-09-14 — checking a documented fact against the code
+  instead of repeating it found a false one: the `cto` skill says
+  `emailDailyReport` runs `30 12 * * 1-5`, `server.js:1918` says `0 13 * * 1-5`.
 
 ### T5 — Write down what was expensive to learn.
 
@@ -160,7 +161,8 @@ Each is subordinate to T1–T5 and numbered within its domain.
 - **R1 — Our beliefs about the market expire.** Every finding carries a date
   because it will need re-checking; re-check on a schedule rather than when
   something feels wrong.
-  *Cadence: monthly. Last acted: never.*
+  *Cadence: monthly. Last acted: 2026-09-14 — first competitor-pricing scan
+  filed (Collectr, TCGplayer fees).*
 - **R2 — Track the frontier of research method itself**, including what AI tools
   make newly answerable. Same evidence bar as T2.
   *Cadence: quarterly. Last acted: never.*
