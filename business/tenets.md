@@ -90,9 +90,9 @@ A report that fills an empty period with plausible prose is worse than no report
 because it reads like signal.
 
 - **Cadence:** continuous.
-- **Last acted:** 2026-09-14 — checking a documented fact against the code
-  instead of repeating it found a false one: the `cto` skill says
-  `emailDailyReport` runs `30 12 * * 1-5`, `server.js:1918` says `0 13 * * 1-5`.
+- **Last acted:** 2026-09-15 — a "known defect" handed to `cto` cited a rule its
+  named source does not contain: `grep -rniE "digest"` finds no digest mechanism
+  in `.claude/` or `server.js`, so the missing digest file was never a defect.
 
 ### T5 — Write down what was expensive to learn.
 
