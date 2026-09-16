@@ -14,7 +14,7 @@ export default function TabNav({ activeTab, onTabChange, user }) {
   // Logged-out visitors only get the Shop tab — the other tabs sit behind
   // the tracker's login gate anyway, so showing them just invites a click
   // that bounces straight back to the login screen.
-  const tabs = user ? [...PRIVATE_TABS, SHOP_TAB] : [SHOP_TAB];
+  const tabs = user ? [SHOP_TAB, ...PRIVATE_TABS] : [SHOP_TAB];
   return (
     <div className="tabs">
       {tabs.map((tab) => (
