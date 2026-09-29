@@ -1396,6 +1396,40 @@ async function expandWotcSets(all) {
   return result;
 }
 
+// For recent sets PokeTrace keeps two entries: a bare-name placeholder with
+// no cards ("pitch-black", cardCount 0) and the real one under a set-code
+// prefix ("me05-pitch-black", "ME05: Pitch Black"). Confirmed live for
+// Pitch Black and Perfect Order. pokemontcg.io's name matches only the bare
+// placeholder, so the era/logo/date landed on an empty tile while the real
+// cards sat unenriched in "Other Sets". When an enriched entry is empty and
+// exactly one "<CODE>: <same name>" sibling has cards, move the enrichment
+// there and drop the placeholder. The match is exact after stripping the
+// code prefix, not fuzzy, and it stops firing on its own once PokeTrace
+// fills the bare slug (older sets like Destined Rivals already have cards
+// on theirs, so they never trigger it).
+const SET_CODE_PREFIX = /^[A-Z]{1,5}\d+[a-z]?:\s*/;
+
+function moveEnrichmentOffEmptyPlaceholders(sets) {
+  const prefixedByName = new Map();
+  for (const s of sets) {
+    if (!SET_CODE_PREFIX.test(s.name) || !s.cardCount) continue;
+    const key = normalizeSetName(s.name.replace(SET_CODE_PREFIX, ''));
+    prefixedByName.set(key, prefixedByName.has(key) ? null : s); // null = ambiguous
+  }
+  const moved = new Map(); // real slug -> enrichment
+  const dropped = new Set();
+  for (const s of sets) {
+    if (!s.series || s.cardCount) continue;
+    const real = prefixedByName.get(normalizeSetName(s.name));
+    if (!real) continue;
+    moved.set(real.slug, { releaseDate: s.releaseDate, series: s.series, logo: s.logo });
+    dropped.add(s.slug);
+  }
+  return sets
+    .filter((s) => !dropped.has(s.slug))
+    .map((s) => (moved.has(s.slug) ? { ...s, ...moved.get(s.slug) } : s));
+}
+
 app.get('/api/sets', async (req, res) => {
   const game = req.query.game === 'pokemon-japanese' ? 'pokemon-japanese' : 'pokemon';
   const cached = setsCache.get(game);
@@ -1437,6 +1471,7 @@ app.get('/api/sets', async (req, res) => {
         const meta = metaByName.get(normalizeSetName(lookupName));
         return meta ? { ...s, releaseDate: meta.releaseDate, series: meta.series, logo: meta.logo } : s;
       });
+      all = moveEnrichmentOffEmptyPlaceholders(all);
       all = await expandWotcSets(all);
     }
 
